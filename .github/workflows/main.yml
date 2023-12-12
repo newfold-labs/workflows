@@ -124,16 +124,16 @@ jobs:
 
       - name: Setup Registry for Module
         working-directory: ./vendor/${{ inputs.module-repo }}
-        if: ${{ secrets.registry-token }}
-        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.registry-token }}" >> .npmrc
+        # if: ${{ secrets.registry-token }}
+        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
 
       - name: NPM Install for Module
         working-directory: ./vendor/${{ inputs.module-repo }}
         run: npm ci --legacy-peer-deps
 
       - name: Setup Registry for Plugin
-        if: ${{ secrets.registry-token }}
-        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.registry-token }}" >> .npmrc
+        # if: ${{ secrets.registry-token }}
+        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
 
       - name: NPM Install for Plugin
         run: npm ci --legacy-peer-deps
