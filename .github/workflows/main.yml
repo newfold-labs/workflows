@@ -124,16 +124,16 @@ jobs:
 
       - name: Setup Registry for Module
         working-directory: ./vendor/${{ inputs.module-repo }}
-        # if: ${{ false != secrets.registry-token }}
-        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
+        if: ${{ secrets.registry-token }}
+        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.registry-token }}" >> .npmrc
 
       - name: NPM Install for Module
         working-directory: ./vendor/${{ inputs.module-repo }}
         run: npm ci --legacy-peer-deps
 
       - name: Setup Registry for Plugin
-        # if: ${{ false != secrets.registry-token }}
-        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
+        if: ${{ secrets.registry-token }}
+        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.registry-token }}" >> .npmrc
 
       - name: NPM Install for Plugin
         run: npm ci --legacy-peer-deps
@@ -167,7 +167,7 @@ jobs:
         run: echo '{"plugins":["${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}"]}' > .wp-env.override.json
 
       - name: Install WordPress
-        run: npx wp-env start --debug
+        run: npx @wordpress/env@latest start
 
       - name: Run Cypress Tests
         run: npm run test:e2e -- --browser chrome
