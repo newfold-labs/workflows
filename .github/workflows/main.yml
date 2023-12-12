@@ -1,0 +1,186 @@
+name: Build and Test Module Updates in Bluehost Plugin
+on:
+  workflow_call:
+    inputs:
+      php-version:
+        description: The version of php to be used
+        type: string
+        default: '8.1'
+      node-version:
+        description: The version of node to be used
+        type: string
+        default: '16.x'
+      plugin-repo:
+        description: The plugin repo
+        type: string
+        required: true
+      plugin-branch:
+        description: The branch of the plugin to be tested
+        type: string
+        default: 'main'
+      module-repo:
+        description: The module repo
+        type: string
+        required: true
+      module-branch:
+        description: The branch of the module to be tested
+        type: string
+        required: true
+    secrets:
+      registry-token:
+        description: The registry token for installing packages
+        default: false
+        required: false
+  workflow_dispatch:
+    inputs:
+      php-version:
+        description: The version of php to be used
+        type: string
+        default: '8.1'
+      node-version:
+        description: The version of node to be used
+        type: string
+        default: '16.x'
+      plugin-repo:
+        description: The plugin repo
+        type: string
+        required: true
+      plugin-branch:
+        description: The branch of the plugin to be tested
+        type: string
+        default: 'main'
+      module-repo:
+        description: The module repo
+        type: string
+        required: true
+      module-branch:
+        description: The branch of the module to be tested
+        type: string
+        required: true
+
+jobs:
+  job:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+          tools: composer, cs2pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout plugin
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.plugin-repo }}
+          ref: ${{ inputs.plugin-branch }}
+
+      - name: Use Node.js 16.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer vendor directory
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Show versions
+        run: |
+          php --version
+          composer --version
+          node --version
+          npm --version
+
+      - name: Install PHP Dependencies for Plugin
+        run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
+
+      - name: Get Module Source
+        run: |
+          composer reinstall ${{ inputs.module-repo }} --prefer-source
+
+      - name: Checkout Module Branch
+        if: ${{ inputs.module-branch != 'main' }}
+        working-directory: ./vendor/${{ inputs.module-repo }}
+        run: git checkout --track origin/${{ inputs.module-branch }}
+
+      - name: Validate composer.json and composer.lock
+        working-directory: ./vendor/${{ inputs.module-repo }}
+        run: composer validate
+
+      - name: Install Module PHP Dependencies
+        working-directory: ./vendor/${{ inputs.module-repo }}
+        run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
+
+      - name: Setup Registry for Module
+        working-directory: ./vendor/${{ inputs.module-repo }}
+        # if: ${{ false != secrets.registry-token }}
+        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
+
+      - name: NPM Install for Module
+        working-directory: ./vendor/${{ inputs.module-repo }}
+        run: npm ci --legacy-peer-deps
+
+      - name: Setup Registry for Plugin
+        # if: ${{ false != secrets.registry-token }}
+        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
+
+      - name: NPM Install for Plugin
+        run: npm ci --legacy-peer-deps
+
+      - name: Build Plugin
+        run: npm run build
+
+      - name: Setup Workflow Context
+        id: workflow
+        working-directory: ${{ runner.temp }}
+        env:
+          REPO: ${{ inputs.plugin-repo }}
+        run: |
+          mkdir dist
+          echo "DIST=${PWD}/dist" >> $GITHUB_OUTPUT
+          echo "PACKAGE=${REPO##*/}" >> $GITHUB_OUTPUT
+
+      - name: Prepare files
+        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . ${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}
+
+      - name: List Files
+        working-directory: ${{ steps.workflow.outputs.DIST }}
+        run: find .
+
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ${{ steps.workflow.outputs.DIST }}
+          name: ${{ steps.workflow.outputs.PACKAGE }}
+
+      - name: Configure WordPress
+        run: echo '{"plugins":["${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}"]}' > .wp-env.override.json
+
+      - name: Install WordPress
+        run: npx wp-env start --debug
+
+      - name: Run Cypress Tests
+        run: npm run test:e2e -- --browser chrome
+
+      - name: Store screenshots of test failures
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          path: ./tests/cypress/screenshots
+          name: screenshots
+
+      - name: Output debug.log file contents
+        if: always()
+        continue-on-error: true
+        run: npx wp-env run wordpress "cat /var/www/html/wp-content/debug.log"
