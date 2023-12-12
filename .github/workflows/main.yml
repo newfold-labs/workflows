@@ -177,7 +177,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           path: ./tests/cypress/screenshots
-          name: screenshots
+          name: ${{ steps.workflow.outputs.PACKAGE }}-screenshots
 
       - name: Output debug.log file contents
         if: always()
