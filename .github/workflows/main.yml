@@ -29,7 +29,6 @@ on:
     secrets:
       registry-token:
         description: The registry token for installing packages
-        default: false
         required: false
   workflow_dispatch:
     inputs:
