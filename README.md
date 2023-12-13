@@ -4,7 +4,7 @@ Action for testing module changes in a plugin.
 Use by doing something along these lines:
 
 ```
-- uses: newfold-labs/action-module-plugin-test/.github/workflows/main.yml@main
+- uses: newfold-labs/workflows/.github/workflows/module-plugin-test.yml@main
   with:
     module-repo: 'newfold-labs/wp-module-marketplace'
     module-branch: 'feature/name'
