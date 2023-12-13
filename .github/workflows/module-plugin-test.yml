@@ -1,4 +1,4 @@
-name: Build and Test Module Updates in Bluehost Plugin
+name: Build and Test Module Updates in Brand Plugin
 on:
   workflow_call:
     inputs:
