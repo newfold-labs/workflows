@@ -47,10 +47,11 @@ jobs:
 - Demo recording.
 - Add other workflows for reusable use in plugins/modules to manage them in one central location. 
 - Add an optional step for when a js build is required (as is in the ecommerce module).
+- Add a flag to signify the tests should be run in cypress cloud for easier debugging.
 
 ## Potential Todos/Ideas:
-- Flag to run for full matrix of WP versions.
-- Flag to run for full matrix of PHP versions.
-- Flag to only run this module's test vs all the plugin tests.
-- Add a comment to the PR with links to the plugin zip files.
+- Add a flag to run for full matrix of WP versions.
+- Add a flag to run for full matrix of PHP versions.
+- Add a flag to only run this module's test vs all the plugin tests.
+- Add a step that makes a comment on the PR with links to all the plugin zip files.
 - Update the plugin versions with a beta tag or pass a new version number.
