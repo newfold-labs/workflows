@@ -42,10 +42,11 @@ jobs:
 
 
 # Todos:
-- Readme updates
-- Demo recording
-- Add other workflows for reusable use in plugins/modules so they are managed in one central location. 
-- Add optional step for when a js build is required (like in the ecommerce module).
+- Readme updates.
+- Add to all `press-1` modules.
+- Demo recording.
+- Add other workflows for reusable use in plugins/modules to manage them in one central location. 
+- Add an optional step for when a js build is required (as is in the ecommerce module).
 
 ## Potential Todos/Ideas:
 - Flag to run for full matrix of WP versions.
