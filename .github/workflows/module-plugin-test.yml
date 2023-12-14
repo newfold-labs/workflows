@@ -215,29 +215,26 @@ jobs:
       - name: Install WordPress
         run: npx @wordpress/env@latest start
 
+      - name: Create Cypress Command
+        id: cypress-command
+        shell: bash
+        run: |
+          cypressCommand=`npm run test:e2e -- --broswer chrome`
+          if ${{ inputs.cypress-cloud-tag != '' }}
+          then
+            cypressCommand+=" --record --key ${{ secrets.CYPRESS_RECORD_KEY }} --tag ${{ inputs.cypress-cloud-tag }}"
+          fi
+          if ${{ inputs.only-module-tests != 'false' }}
+          then
+            cypressCommand+=" --spec "vendor/${{ inputs.module-repo }}/**/*"
+          fi
+          echo "cypressCommand=cypressCommand" >> $GITHUB_OUTPUT
+
       - name: Run Cypress Tests
         if: |
           ${{ inputs.cypress-cloud-tag == '' }} &&
           ${{ inputs.only-module-tests == 'false' }}
-        run: npm run test:e2e -- --browser chrome
-
-      - name: Run Module Cypress Tests
-        if: |
-          ${{ inputs.cypress-cloud-tag == '' }} &&
-          ${{ inputs.only-module-tests != 'false' }}
-        run: npm run test:e2e -- --browser chrome --spec "vendor/${{ inputs.module-repo }}/**/*"
-
-      - name: Run Cypress Cloud Tests
-        if: |
-          ${{ inputs.cypress-cloud-tag != '' }} &&
-          ${{ inputs.only-module-tests == 'false' }}
-        run: npm run test:e2e -- --browser chrome --record --key ${{ secrets.CYPRESS_RECORD_KEY }} --tag ${{ inputs.cypress-cloud-tag }}
-
-      - name: Run Module Cypress Cloud Tests
-        if: |
-          ${{ inputs.cypress-cloud-tag != '' }} &&
-          ${{ inputs.only-module-tests != 'false' }}
-        run: npm run test:e2e -- --browser chrome --record --key ${{ secrets.CYPRESS_RECORD_KEY }} --tag ${{ inputs.cypress-cloud-tag }} --spec "vendor/${{ inputs.module-repo }}/**/*"
+        run: ${{ steps.cypress-command.outputs.cypressCommand }}
 
       - name: Store screenshots of test failures
         if: failure()
