@@ -26,11 +26,6 @@ on:
         description: The branch of the module to be tested
         type: string
         required: true
-      cypress-cloud-tag:
-        description: The tags to use for cypress cloud, if present the cloud test step will be used with inherited key
-        type: string
-        default: ''
-        required: false
       sync-npm-package:
         description: Flag to sync module files to equivalent node module
         type: boolean
