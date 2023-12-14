@@ -26,9 +26,15 @@ on:
         description: The branch of the module to be tested
         type: string
         required: true
-    secrets:
-      registry-token:
-        description: The registry token for installing packages
+      cypress-cloud-tag:
+        description: The tags to use for cypress cloud, if present the cloud test step will be used with inherited key
+        type: string
+        default: ''
+        required: false
+      sync-npm-package:
+        description: Flag to sync module files to equivalent node module
+        type: boolean
+        default: false
         required: false
   workflow_dispatch:
     inputs:
@@ -169,9 +175,9 @@ jobs:
       - name: NPM Install for Plugin
         run: npm ci --legacy-peer-deps
 
-      # - name: Sync Module build files to node_modules dir
-      #   if: ${{ steps.build.outputs.hasBuildCommand != 'false' }}
-      #   run: rsync -r vendor/${{ inputs.module-repo }}/build node_modules/@${{ inputs.module-repo }}/build
+      - name: Sync Module build files to node_modules dir
+        if: ${{ inputs.sync-npm-package }} && ${{ steps.build.outputs.hasBuildCommand != 'false' }}
+        run: rsync -r vendor/${{ inputs.module-repo }}/build node_modules/@${{ inputs.module-repo }}/build
 
       - name: Build Plugin
         run: npm run build
@@ -205,7 +211,16 @@ jobs:
         run: npx @wordpress/env@latest start
 
       - name: Run Cypress Tests
+        if: ${{ inputs.cypress-cloud-tag == '' }}
         run: npm run test:e2e -- --browser chrome
+
+      - name: Run Module Cypress Tests
+        if: ${{ inputs.cypress-cloud-tag == '' }} && ${{ inputs.only-module-tests }}
+        run: npm run test:e2e -- --browser chrome --spec "vendor/${{ inputs.plugin-repo }}/**/*"
+
+      - name: Run Cypress Cloud Tests
+        if: ${{ inputs.cypress-cloud-tag != '' }}
+        run: npm run test:e2e -- --browser chrome --record --key ${{ secrets.CYPRESS_RECORD_KEY }} --tag ${{ inputs.cypress-cloud-tag }}
 
       - name: Store screenshots of test failures
         if: failure()
