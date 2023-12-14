@@ -132,12 +132,12 @@ jobs:
         if: ${{ hashFiles('vendor/${{ inputs.module-repo }}/package.json') != '' }}
         run: npm ci --legacy-peer-deps
 
-      - name: Build Module if build command exists
-        working-directory: ./vendor/${{ inputs.module-repo }}
-        if: |
-          ${{ hashFiles('vendor/${{ inputs.module-repo }}/package.json') != '' }} &&
-          grep -wq `"build":` vendor/${{ inputs.module-repo }}/package.json
-        run: npm run build
+      # - name: Build Module if build command exists
+      #   working-directory: ./vendor/${{ inputs.module-repo }}
+      #   if: |
+      #     ${{ hashFiles('vendor/${{ inputs.module-repo }}/package.json') != '' }} &&
+      #     grep -wq `"build":` vendor/${{ inputs.module-repo }}/package.json
+      #   run: npm run build
 
       # step to sync js package files with build files
 
