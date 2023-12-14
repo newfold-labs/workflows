@@ -122,22 +122,37 @@ jobs:
         working-directory: ./vendor/${{ inputs.module-repo }}
         run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
 
+      - name: Check Module for package file
+        id: package
+        working-directory: ./vendor/${{ inputs.module-repo }}
+        shell: bash
+        run: |
+          echo "hasPackageJson=`test -f vendor/${{ inputs.module-repo }}/package.json` >> $GITHUB_OUTPUT
+
+      - name: Check Module for build script
+        id: build
+        working-directory: ./vendor/${{ inputs.module-repo }}
+        if: ${{ steps.workflow.outputs.hasPackageJson }}
+        shell: bash
+        run: |
+          echo "hasBuildCommand=`grep -wq '"build":' vendor/${{ inputs.module-repo }}/package.json"` >> $GITHUB_OUTPUT
+
       - name: Setup Registry for Module
         working-directory: ./vendor/${{ inputs.module-repo }}
-        if: ${{ hashFiles('vendor/${{ inputs.module-repo }}/package.json') != '' }}
+        if: ${{ steps.package.outputs.hasPackageJson != '' }}
         run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
 
       - name: NPM Install for Module if package.json exists
         working-directory: ./vendor/${{ inputs.module-repo }}
-        if: ${{ hashFiles('vendor/${{ inputs.module-repo }}/package.json') != '' }}
+        if: ${{ steps.package.outputs.hasPackageJson != '' }}
         run: npm ci --legacy-peer-deps
 
-      # - name: Build Module if build command exists
-      #   working-directory: ./vendor/${{ inputs.module-repo }}
-      #   if: |
-      #     ${{ hashFiles('vendor/${{ inputs.module-repo }}/package.json') != '' }} &&
-      #     grep -wq `"build":` vendor/${{ inputs.module-repo }}/package.json
-      #   run: npm run build
+      - name: Build Module if build command exists
+        working-directory: ./vendor/${{ inputs.module-repo }}
+        if: |
+          ${{ steps.package.outputs.hasPackageJson != '' }} && 
+          ${{ steps.build.outputs.hasBuildCommand != '' }}
+        run: npm run build
 
       # step to sync js package files with build files
 
