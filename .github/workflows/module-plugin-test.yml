@@ -124,18 +124,18 @@ jobs:
 
       - name: Setup Registry for Module
         working-directory: ./vendor/${{ inputs.module-repo }}
-        if: ${{ hashFiles('package.json') }}
+        if: ${{ hashFiles('package.json') != '' }}
         run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
 
       - name: NPM Install for Module if package.json exists
         working-directory: ./vendor/${{ inputs.module-repo }}
-        if: ${{ hashFiles('package.json') }}
+        if: ${{ hashFiles('package.json') != '' }}
         run: npm ci --legacy-peer-deps
 
       - name: Build Module if build command exists
         working-directory: ./vendor/${{ inputs.module-repo }}
         if: |
-          ${{ hashFiles('package.json') }}
+          ${{ hashFiles('package.json') != '' }} &&
           grep -wq `"build":` package.json
         run: npm run build
 
