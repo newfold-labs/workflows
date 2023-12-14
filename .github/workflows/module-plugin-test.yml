@@ -181,7 +181,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Sync Module build files to node_modules dir
-        if: ${{ inputs.sync-npm-package != false }} && ${{ steps.build.outputs.hasBuildCommand != 'false' }}
+        if: ${{ inputs.sync-npm-package }}
         run: rsync -r vendor/${{ inputs.module-repo }}/build node_modules/@${{ inputs.module-repo }}/build
 
       - name: Build Plugin
