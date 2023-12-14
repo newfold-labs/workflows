@@ -36,6 +36,11 @@ on:
         type: boolean
         default: false
         required: false
+      only-module-tests:
+        description: Flag to run only this module tests
+        type: boolean
+        default: false
+        required: false
   workflow_dispatch:
     inputs:
       php-version:
