@@ -181,7 +181,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Sync Module build files to node_modules dir
-        if: ${{ inputs.sync-npm-package }} && ${{ steps.build.outputs.hasBuildCommand != 'false' }}
+        if: ${{ inputs.sync-npm-package != 'false' }} && ${{ steps.build.outputs.hasBuildCommand != 'false' }}
         run: rsync -r vendor/${{ inputs.module-repo }}/build node_modules/@${{ inputs.module-repo }}/build
 
       - name: Build Plugin
@@ -220,7 +220,7 @@ jobs:
         run: npm run test:e2e -- --browser chrome
 
       - name: Run Module Cypress Tests
-        if: ${{ inputs.cypress-cloud-tag == '' }} && ${{ inputs.only-module-tests }}
+        if: ${{ inputs.cypress-cloud-tag == '' }} && ${{ inputs.only-module-tests != 'false' }}
         run: npm run test:e2e -- --browser chrome --spec "vendor/${{ inputs.plugin-repo }}/**/*"
 
       - name: Run Cypress Cloud Tests
