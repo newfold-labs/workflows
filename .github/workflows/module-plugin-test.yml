@@ -217,7 +217,7 @@ jobs:
 
       - name: Run Cypress Tests
         if: ${{ ! inputs.only-module-tests }}
-        run: npm run test:e2e -- --browser chrome"
+        run: npm run test:e2e -- --browser chrome
 
       - name: Run Only Module Cypress Tests
         if: ${{ inputs.only-module-tests }}
