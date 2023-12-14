@@ -127,7 +127,7 @@ jobs:
         working-directory: ./vendor/${{ inputs.module-repo }}
         shell: bash
         run: |
-          echo "hasPackageJson=`test -f vendor/${{ inputs.module-repo }}/package.json` >> $GITHUB_OUTPUT
+          echo "hasPackageJson=`test -f vendor/${{ inputs.module-repo }}/package.json`" >> $GITHUB_OUTPUT
 
       - name: Check Module for build script
         id: build
@@ -135,7 +135,7 @@ jobs:
         if: ${{ steps.workflow.outputs.hasPackageJson }}
         shell: bash
         run: |
-          echo "hasBuildCommand=`grep -wq '"build":' vendor/${{ inputs.module-repo }}/package.json"` >> $GITHUB_OUTPUT
+          echo "hasBuildCommand=`grep -wq '"build":' vendor/${{ inputs.module-repo }}/package.json`" >> $GITHUB_OUTPUT
 
       - name: Setup Registry for Module
         working-directory: ./vendor/${{ inputs.module-repo }}
