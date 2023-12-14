@@ -163,13 +163,15 @@ jobs:
         if: ${{ steps.build.outputs.hasBuildCommand != 'false' }}
         run: npm run build
 
-      # step to sync js package files with build files
-
       - name: Setup Registry for Plugin
         run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
 
       - name: NPM Install for Plugin
         run: npm ci --legacy-peer-deps
+
+      # - name: Sync Module build files to node_modules dir
+      #   if: ${{ steps.build.outputs.hasBuildCommand != 'false' }}
+      #   run: rsync -r vendor/${{ inputs.module-repo }}/build node_modules/@${{ inputs.module-repo }}/build
 
       - name: Build Plugin
         run: npm run build
