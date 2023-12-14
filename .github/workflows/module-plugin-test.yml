@@ -127,18 +127,24 @@ jobs:
         working-directory: ./vendor/${{ inputs.module-repo }}
         shell: bash
         run: |
-          hasPackageJson=`test -f package.json`
-          echo "Module has package.json file: $hasPackageJson"
-          echo "hasPackageJson=$hasPackageJson" >> $GITHUB_OUTPUT
+          if [[ -f package.json ]]
+          then
+            echo "hasPackageJson=true" >> $GITHUB_OUTPUT
+          else
+            echo "hasPackageJson=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Check Module for build script
         id: build
         working-directory: ./vendor/${{ inputs.module-repo }}
         shell: bash
         run: |
-          hasBuildCommand=`grep -wq '"build":' package.json`
-          echo "Module has build command: $hasBuildCommand"
-          echo "hasBuildCommand=$hasBuildCommand" >> $GITHUB_OUTPUT
+          if grep -wq '"build":' package.json;
+          then
+            echo "hasBuildCommand=true" >> $GITHUB_OUTPUT
+          else
+            echo "hasBuildCommand=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Setup Registry for Module
         working-directory: ./vendor/${{ inputs.module-repo }}
