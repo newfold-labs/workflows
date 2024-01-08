@@ -111,6 +111,12 @@ jobs:
       - name: Install PHP Dependencies for Plugin
         run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
 
+      - name: Setup Registry for Plugin
+        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
+
+      - name: NPM Install for Plugin
+        run: npm ci --legacy-peer-deps
+
       - name: Get Module Source
         run: |
           composer reinstall ${{ inputs.module-repo }} --prefer-source
@@ -168,12 +174,6 @@ jobs:
         working-directory: vendor/${{ inputs.module-repo }}
         if: ${{ steps.build.outputs.hasBuildCommand != 'false' }}
         run: npm run build
-
-      - name: Setup Registry for Plugin
-        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
-
-      - name: NPM Install for Plugin
-        run: npm ci --legacy-peer-deps
 
       - name: Sync Module build files to node_modules dir
         if: ${{ inputs.sync-npm-package }}
