@@ -109,6 +109,7 @@ Refer to the [ecommerce module workflow PR](https://github.com/newfold-labs/wp-m
 
 
 ### Ideas for Improvement:
+- Add an input to specify a secondary module repo and branch name to pull those changes in as well for integrated testing when corresponding changes are required in another module. (It should be enough to allow for one extra module change for now, if more are needed we can think through a json object or something.)
 - Add a flag to signify tests should run in Cypress cloud for easier debugging (devise a way to pass the plugin level key).
 - Add a flag to run for the full matrix of WP versions.
 - Add a flag to run for the full matrix of PHP versions.
