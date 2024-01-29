@@ -9,7 +9,7 @@ on:
       node-version:
         description: The version of node to be used
         type: string
-        default: '16.x'
+        default: '20.x'
       plugin-repo:
         description: The plugin repo
         type: string
@@ -55,7 +55,7 @@ on:
       node-version:
         description: The version of node to be used
         type: string
-        default: '16.x'
+        default: '20.x'
       plugin-repo:
         description: The plugin repo
         type: string
