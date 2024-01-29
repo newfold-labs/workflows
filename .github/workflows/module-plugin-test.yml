@@ -26,6 +26,16 @@ on:
         description: The branch of the module to be tested
         type: string
         required: true
+      secondary-module-repo:
+        description: An optional secondary module repo
+        type: string
+        required: false
+        default: ''
+      secondary-module-branch:
+        description: The branch of the secondary module to be tested
+        type: string
+        required: false
+        default: ''
       sync-npm-package:
         description: Flag to sync module files to equivalent node module
         type: boolean
@@ -83,7 +93,7 @@ jobs:
           repository: ${{ inputs.plugin-repo }}
           ref: ${{ inputs.plugin-branch }}
 
-      - name: Use Node.js 16.x
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
@@ -125,6 +135,16 @@ jobs:
         if: ${{ inputs.module-branch != 'main' }}
         working-directory: vendor/${{ inputs.module-repo }}
         run: git checkout --track origin/${{ inputs.module-branch }}
+
+      - name: Get Secondary Module Source
+        if: ${{ inputs.secondary-module-repo != '' }}
+        run: |
+          composer reinstall ${{ inputs.secondary-module-repo }} --prefer-source
+
+      - name: Checkout Secondary Module Branch
+        if: ${{ inputs.secondary-module-branch != '' && inputs.secondary-module-repo != '' }}
+        working-directory: vendor/${{ inputs.secondary-module-repo }}
+        run: git checkout --track origin/${{ inputs.secondary-module-branch }}
 
       - name: Validate composer.json and composer.lock
         working-directory: vendor/${{ inputs.module-repo }}
