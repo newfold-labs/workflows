@@ -142,7 +142,7 @@ jobs:
           composer reinstall ${{ inputs.secondary-module-repo }} --prefer-source
 
       - name: Checkout Secondary Module Branch
-        if: ${{ inputs.secondary-module-branch != '' && inputs.secondary-module-repo != '' }}
+        if: ${{ (inputs.secondary-module-branch != '') && (inputs.secondary-module-repo != '') && (inputs.secondary-module-repo != 'main') }}
         working-directory: vendor/${{ inputs.secondary-module-repo }}
         run: git checkout --track origin/${{ inputs.secondary-module-branch }}
 
