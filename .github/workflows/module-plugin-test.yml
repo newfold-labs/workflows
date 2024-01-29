@@ -128,8 +128,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Get Module Source
-        run: |
-          composer reinstall ${{ inputs.module-repo }} --prefer-source
+        run: composer reinstall ${{ inputs.module-repo }} --prefer-source
 
       - name: Checkout Module Branch
         if: ${{ inputs.module-branch != 'main' }}
@@ -138,15 +137,12 @@ jobs:
 
       - name: Get Secondary Module Source
         if: ${{ inputs.secondary-module-repo != '' }}
-        run: |
-          composer reinstall ${{ inputs.secondary-module-repo }} --prefer-source
+        run: composer reinstall ${{ inputs.secondary-module-repo }} --prefer-source
 
       - name: Checkout Secondary Module Branch
         if: ${{ (inputs.secondary-module-branch != '') && (inputs.secondary-module-repo != '') }}
         working-directory: vendor/${{ inputs.secondary-module-repo }}
-        run: |
-          git fetch --all --tags --prune
-          git checkout --track origin/${{ inputs.secondary-module-branch }}
+        run: git checkout --track origin/${{ inputs.secondary-module-branch }}
 
       - name: Validate composer.json and composer.lock
         working-directory: vendor/${{ inputs.module-repo }}
