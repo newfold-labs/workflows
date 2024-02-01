@@ -211,11 +211,11 @@ jobs:
         run: npx @wordpress/env@latest start
 
       - name: Run Module Cypress Tests
-        run: npm run test:e2e -- --browser chrome --spec "vendor/${{ inputs.module-repo }}/**/*"
+        run: npm run test:e2e -- --browser chrome --spec "vendor/(${{ inputs.module-repo }}/**/*.cy.js)"
 
       - name: Run Remaining Cypress Tests
         if: ${{ ! inputs.only-module-tests }}
-        run: npm run test:e2e -- --browser chrome --spec "vendor/!(${{ inputs.module-repo }})"
+        run: npm run test:e2e -- --browser chrome --spec "vendor/!(${{ inputs.module-repo }}/**/*.cy.js)"
 
       - name: Store screenshots of test failures
         if: failure()
