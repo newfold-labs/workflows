@@ -208,7 +208,7 @@ jobs:
         run: echo '{"plugins":["${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}"]}' > .wp-env.override.json
 
       - name: Install WordPress
-        run: npx @wordpress/env@latest start
+        run: npx @wordpress/env@latest start --debug
 
       - name: Run Cypress Tests
         if: ${{ ! inputs.only-module-tests }}
