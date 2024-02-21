@@ -83,7 +83,7 @@ jobs:
           repository: ${{ inputs.plugin-repo }}
           ref: ${{ inputs.plugin-branch }}
 
-      - name: Use Node.js 16.x
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
