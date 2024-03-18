@@ -9,7 +9,7 @@ on:
       node-version:
         description: The version of node to be used
         type: string
-        default: '16.x'
+        default: '20.x'
       plugin-repo:
         description: The plugin repo
         type: string
@@ -26,6 +26,16 @@ on:
         description: The branch of the module to be tested
         type: string
         required: true
+      secondary-module-repo:
+        description: An optional secondary module repo
+        type: string
+        required: false
+        default: ''
+      secondary-module-branch:
+        description: The branch of the secondary module to be tested
+        type: string
+        required: false
+        default: ''
       sync-npm-package:
         description: Flag to sync module files to equivalent node module
         type: boolean
@@ -45,7 +55,7 @@ on:
       node-version:
         description: The version of node to be used
         type: string
-        default: '16.x'
+        default: '20.x'
       plugin-repo:
         description: The plugin repo
         type: string
@@ -118,13 +128,21 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Get Module Source
-        run: |
-          composer reinstall ${{ inputs.module-repo }} --prefer-source
+        run: composer reinstall ${{ inputs.module-repo }} --prefer-source
 
       - name: Checkout Module Branch
         if: ${{ inputs.module-branch != 'main' }}
         working-directory: vendor/${{ inputs.module-repo }}
         run: git checkout --track origin/${{ inputs.module-branch }}
+
+      - name: Get Secondary Module Source
+        if: ${{ inputs.secondary-module-repo != '' }}
+        run: composer reinstall ${{ inputs.secondary-module-repo }} --prefer-source
+
+      - name: Checkout Secondary Module Branch
+        if: ${{ (inputs.secondary-module-branch != '') && (inputs.secondary-module-repo != '') }}
+        working-directory: vendor/${{ inputs.secondary-module-repo }}
+        run: git checkout --track origin/${{ inputs.secondary-module-branch }}
 
       - name: Validate composer.json and composer.lock
         working-directory: vendor/${{ inputs.module-repo }}
