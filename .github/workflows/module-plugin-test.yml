@@ -93,7 +93,7 @@ jobs:
           repository: ${{ inputs.plugin-repo }}
           ref: ${{ inputs.plugin-branch }}
 
-      - name: Setup Node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
@@ -226,7 +226,7 @@ jobs:
         run: echo '{"plugins":["${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}"]}' > .wp-env.override.json
 
       - name: Install WordPress
-        run: npx @wordpress/env@latest start
+        run: npx @wordpress/env@latest start --debug
 
       - name: Run Cypress Tests
         if: ${{ ! inputs.only-module-tests }}
