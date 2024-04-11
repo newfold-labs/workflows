@@ -118,6 +118,9 @@ jobs:
           node --version
           npm --version
 
+      - name: Validate composer.json and composer.lock
+        run: composer validate
+
       - name: Install PHP Dependencies for Plugin
         run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
 
