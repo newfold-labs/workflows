@@ -199,7 +199,7 @@ jobs:
         working-directory: ${{ steps.workflow.outputs.DIST }}
         run: find .
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           path: ${{ steps.workflow.outputs.DIST }}
           name: ${{ steps.workflow.outputs.PACKAGE }}
@@ -220,7 +220,7 @@ jobs:
 
       - name: Store screenshots of test failures
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           path: ./tests/cypress/screenshots
           name: ${{ steps.workflow.outputs.PACKAGE }}-screenshots
