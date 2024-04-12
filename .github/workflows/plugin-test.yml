@@ -1,0 +1,174 @@
+name: Build and Test Module Updates in Brand Plugin
+on:
+  workflow_call:
+    inputs:
+      php-version:
+        description: The version of php to be used
+        type: string
+        default: '8.1'
+      node-version:
+        description: The version of node to be used
+        type: string
+        default: '20.x'
+      plugin-repo:
+        description: The plugin repo
+        type: string
+        required: true
+      plugin-branch:
+        description: The branch of the plugin to be tested
+        type: string
+        default: 'main'
+      cypress-record:
+        description: Wether to record cypress tests to cloud
+        type: boolean
+        default: false
+      cypress-key:
+        description: Cypress key
+        type: string
+        default: ''
+      cypress-tag:
+        description: Cypress tag(s)
+        type: string
+        default: ''
+      wp-version:
+        description: WordPress Version, leave blank for latest
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      php-version:
+        description: The version of php to be used
+        type: string
+        default: '8.1'
+      node-version:
+        description: The version of node to be used
+        type: string
+        default: '20.x'
+      plugin-repo:
+        description: The plugin repo
+        type: string
+        required: true
+      plugin-branch:
+        description: The branch of the plugin to be tested
+        type: string
+        default: 'main'
+
+jobs:
+  job:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+          tools: composer, cs2pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout plugin
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.plugin-repo }}
+          ref: ${{ inputs.plugin-branch }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer vendor directory
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Show versions
+        run: |
+          php --version
+          composer --version
+          node --version
+          npm --version
+
+      - name: Validate composer.json and composer.lock
+        run: composer validate
+
+      - name: Install PHP Dependencies
+        run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
+
+      - name: Setup Registry
+        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
+
+      - name: NPM Install
+        run: npm ci --legacy-peer-deps
+
+      - name: Build Plugin
+        run: npm run build
+
+      - name: Setup Workflow Context
+        id: workflow
+        working-directory: ${{ runner.temp }}
+        env:
+          REPO: ${{ inputs.plugin-repo }}
+        run: |
+          mkdir dist
+          echo "DIST=${PWD}/dist" >> $GITHUB_OUTPUT
+          echo "PACKAGE=${REPO##*/}" >> $GITHUB_OUTPUT
+
+      - name: Prepare files
+        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . ${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}
+
+      - name: List Files
+        working-directory: ${{ steps.workflow.outputs.DIST }}
+        run: find .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          path: ${{ steps.workflow.outputs.DIST }}
+          name: ${{ steps.workflow.outputs.PACKAGE }}
+
+      - name: Configure WordPress
+        run: |
+          echo '{
+          echo "plugins":["${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}"]
+          echo "core": "WordPress/WordPress#tags/${{ inputs.wp-version }}",
+          echo "phpVersion": "${{ inputs.php-version }}",
+          echo }' > .wp-env.override.json
+
+      - name: Install WordPress
+        run: npx @wordpress/env@latest start --debug
+
+      - name: Configure Cypress
+        run: |
+          echo '{
+          echo "wpVersion": "${{ inputs.wp-version }}",
+          echo "phpVersion": "${{ inputs.php-version }}"
+          echo }' > cypress.env.json
+
+      - name: Run Cypress Tests
+        if: ${{ ! inputs.cypress-record }}
+        run: npm run test:e2e -- --browser chrome"
+
+      - name: Run & Record Cypress Tests
+        if: ${{ inputs.cypress-record && inputs.cypress-key != '' && inputs.cypress-tags != '' }}
+        run: npm run test:e2e -- --browser chrome --record --key ${{ inputs.cypress-key }} --tag ${{ inputs.cypress-tag }}"
+
+      - name: Store screenshots of test failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          path: ./tests/cypress/screenshots
+          name: ${{ steps.workflow.outputs.PACKAGE }}-screenshots
+
+      - name: Output debug.log file contents
+        if: always()
+        continue-on-error: true
+        run: npx wp-env run wordpress "cat /var/www/html/wp-content/debug.log"
