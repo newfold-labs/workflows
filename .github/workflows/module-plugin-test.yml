@@ -198,7 +198,9 @@ jobs:
 
       - name: Sync Module build files to node_modules dir
         if: ${{ inputs.sync-npm-package }}
-        run: rsync -r -v -h --progress vendor/${{ inputs.module-repo }}/build node_modules/@${{ inputs.module-repo }}/build
+        run: |
+          echo "syncing files from vendor/${{ inputs.module-repo }}/build to node_modules/@${{ inputs.module-repo }}/build"
+          rsync -r -v -h --progress vendor/${{ inputs.module-repo }}/build node_modules/@${{ inputs.module-repo }}/build
 
       - name: Build Plugin
         run: npm run build
