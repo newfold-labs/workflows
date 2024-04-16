@@ -200,9 +200,9 @@ jobs:
         if: ${{ inputs.sync-npm-package }}
         run: |
           echo "vendor/${{ inputs.module-repo }}/build"
-          l vendor/${{ inputs.module-repo }}/build
+          ls -l vendor/${{ inputs.module-repo }}/build
           echo "node_modules/@${{ inputs.module-repo }}/build"
-          l node_modules/@${{ inputs.module-repo }}/build
+          ls -l node_modules/@${{ inputs.module-repo }}/build
           cat node_modules/@${{ inputs.module-repo }}/build/index.js
           rsync -r -v -h --progress vendor/${{ inputs.module-repo }}/build node_modules/@${{ inputs.module-repo }}/build
           cat node_modules/@${{ inputs.module-repo }}/build/index.js
