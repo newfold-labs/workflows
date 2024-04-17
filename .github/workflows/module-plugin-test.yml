@@ -204,7 +204,7 @@ jobs:
           echo 'Test file to see if rsync worked.' > vendor/${{ inputs.module-repo }}/build/test.txt
           echo "source: vendor/${{ inputs.module-repo }}/build"
           ls -l vendor/${{ inputs.module-repo }}/build
-          rsync -r --progress --human-readable "vendor/${{ inputs.module-repo }}/build/**" "node_modules/@${{ inputs.module-repo }}/build/**"
+          rsync -r --progress --human-readable "vendor/${{ inputs.module-repo }}/build/" "node_modules/@${{ inputs.module-repo }}/build"
           echo "destination after rsync:"
           ls -l node_modules/@${{ inputs.module-repo }}/build
       - name: Build Plugin
