@@ -199,15 +199,13 @@ jobs:
       - name: Sync New Module build files to node_modules dir for inclusion in plugin build
         if: ${{ inputs.sync-npm-package }}
         run: |
-          src = "vendor/${{ inputs.module-repo }}/build"
-          dest = "node_modules/@${{ inputs.module-repo }}/build"
-          echo 'Test file to see if rsync worked.' > "$src/test.txt"
-          echo "SOURCE $src"
-          ls -l $src
-          echo "DESTINATION $dest"
-          ls -l $dest
-          rsync --recursive --progress "$src" "$dest"
-          echo "UPDATED DESTINATION:"
+          echo "source: vendor/${{ inputs.module-repo }}/build"
+          ls -l vendor/${{ inputs.module-repo }}/build
+          echo "destination: node_modules/@${{ inputs.module-repo }}/build"
+          ls -l node_modules/@${{ inputs.module-repo }}/build
+          rsync --progress --human-readable "vendor/${{ inputs.module-repo }}/build/index.js" "node_modules/@${{ inputs.module-repo }}/build/index.js"
+          rsync --progress --human-readable "vendor/${{ inputs.module-repo }}/build/index.asset.php" "node_modules/@${{ inputs.module-repo }}/build/index.asset.php"
+          echo "destination after rsync: node_modules/@${{ inputs.module-repo }}/build"
           ls -l node_modules/@${{ inputs.module-repo }}/build
       - name: Build Plugin
         run: npm run build
