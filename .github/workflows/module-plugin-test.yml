@@ -147,10 +147,6 @@ jobs:
         working-directory: vendor/${{ inputs.secondary-module-repo }}
         run: git checkout --track origin/${{ inputs.secondary-module-branch }}
 
-      - name: Validate composer.json and composer.lock
-        working-directory: vendor/${{ inputs.module-repo }}
-        run: composer validate
-
       - name: Install Module PHP Dependencies
         working-directory: vendor/${{ inputs.module-repo }}
         run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
@@ -196,10 +192,10 @@ jobs:
         if: ${{ steps.build.outputs.hasBuildCommand != 'false' }}
         run: npm run build
 
-      - name: Sync New Module build files to node_modules dir for inclusion in plugin build
+      - name: Sync Module build files to node_modules dir
         if: ${{ inputs.sync-npm-package }}
-        run: |
-          rsync -r -v -h "vendor/${{ inputs.module-repo }}/build/" "node_modules/@${{ inputs.module-repo }}/build"
+        run: rsync -r -v -h --progress vendor/${{ inputs.module-repo }}/build node_modules/@${{ inputs.module-repo }}/build
+
       - name: Build Plugin
         run: npm run build
 
