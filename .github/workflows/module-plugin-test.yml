@@ -196,16 +196,16 @@ jobs:
         if: ${{ steps.build.outputs.hasBuildCommand != 'false' }}
         run: npm run build
 
-      - name: Sync Module build files to node_modules dir
+      - name: Sync New Module build files to node_modules dir for inclusion in plugin build
         if: ${{ inputs.sync-npm-package }}
         run: |
-          echo 'The only winning move is not to play.' > vendor/${{ inputs.module-repo }}/build/test.txt
+          echo 'Test file to see if rsync worked.' > vendor/${{ inputs.module-repo }}/build/test.txt
           echo "SOURCE vendor/${{ inputs.module-repo }}/build"
           ls -l vendor/${{ inputs.module-repo }}/build
           echo "DESTINATION node_modules/@${{ inputs.module-repo }}/build"
           ls -l node_modules/@${{ inputs.module-repo }}/build
           echo "Updating DESTINATION from SOURCE?"
-          cp -r -f "vendor/${{ inputs.module-repo }}/build" "node_modules/@${{ inputs.module-repo }}/build"
+          rsync -r "vendor/${{ inputs.module-repo }}/build" "node_modules/@${{ inputs.module-repo }}/build"
           echo "UPDATED DESTINATION node_modules/@${{ inputs.module-repo }}/build"
           ls -l node_modules/@${{ inputs.module-repo }}/build
       - name: Build Plugin
