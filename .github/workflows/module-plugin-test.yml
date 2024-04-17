@@ -205,7 +205,7 @@ jobs:
           echo "DESTINATION node_modules/@${{ inputs.module-repo }}/build"
           ls -l node_modules/@${{ inputs.module-repo }}/build
           echo "Updating DESTINATION from SOURCE?"
-          cp -r -f vendor/${{ inputs.module-repo }}/build node_modules/@${{ inputs.module-repo }}/build
+          cp -r -f "vendor/${{ inputs.module-repo }}/build" "node_modules/@${{ inputs.module-repo }}/build"
           echo "UPDATED DESTINATION node_modules/@${{ inputs.module-repo }}/build"
           ls -l node_modules/@${{ inputs.module-repo }}/build
       - name: Build Plugin
