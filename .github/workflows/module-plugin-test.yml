@@ -228,8 +228,15 @@ jobs:
       - name: Install WordPress
         run: npx @wordpress/env@latest start --debug
 
+      - name: Check for module tests
+        id: check-for-module-tests
+        run:
+          if [[ $(find ./vendor/${{ inputs.module-repo }} -depth -name '*.cy*') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi
+          if [[ $MODULE_TESTS_FOUND -eq 0 ]]; then echo "No module Cypress tests found"; fi
+          echo "MODULE_TESTS_FOUND=$MODULE_TESTS_FOUND" >> $GITHUB_OUTPUT;
+
       - name: Run Module Cypress Tests
-        if: $([[ ! $(find ./vendor/${{ inputs.module-repo }} -depth -name '*.cy*') ]])
+        if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND }}
         run: npm run test:e2e -- --browser chrome --spec "vendor/(${{ inputs.module-repo }}/**/*.cy.js)"
 
       - name: Run Remaining Cypress Tests
