@@ -229,6 +229,7 @@ jobs:
         run: npx @wordpress/env@latest start --debug
 
       - name: Run Module Cypress Tests
+        if: $([[ ! $(find ./vendor/${{ inputs.module-repo }} -depth -name '*.cy*') ]])
         run: npm run test:e2e -- --browser chrome --spec "vendor/(${{ inputs.module-repo }}/**/*.cy.js)"
 
       - name: Run Remaining Cypress Tests
