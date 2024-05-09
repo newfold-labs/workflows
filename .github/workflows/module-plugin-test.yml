@@ -236,7 +236,7 @@ jobs:
           echo "MODULE_TESTS_FOUND=$MODULE_TESTS_FOUND" >> $GITHUB_OUTPUT;
 
       - name: Run Module Cypress Tests
-        if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND }}
+        if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND == 1 }}
         run: npm run test:e2e -- --browser chrome --spec "vendor/(${{ inputs.module-repo }}/**/*.cy.js)"
 
       - name: Run Remaining Cypress Tests
