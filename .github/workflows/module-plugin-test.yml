@@ -131,6 +131,7 @@ jobs:
         run: composer reinstall ${{ inputs.module-repo }} --prefer-source
 
       - name: Checkout Module Branch
+        continue-on-error: true
         if: ${{ inputs.module-branch != 'main' }}
         working-directory: vendor/${{ inputs.module-repo }}
         run: git checkout --track origin/${{ inputs.module-branch }}
