@@ -41,6 +41,11 @@ on:
         type: boolean
         default: false
         required: false
+      sync-npm-package-name:
+        description: Package name to sync this module files into
+        type: string
+        default: ''
+        required: false
       only-module-tests:
         description: Flag to run only this module tests
         type: boolean
@@ -194,9 +199,9 @@ jobs:
         if: ${{ steps.build.outputs.hasBuildCommand != 'false' }}
         run: npm run build
 
-      - name: Sync Module build files to node_modules dir
-        if: ${{ inputs.sync-npm-package }}
-        run: rsync -r -v -h "vendor/${{ inputs.module-repo }}/build/" "node_modules/@${{ inputs.module-repo }}/build"
+      - name: Sync Module build files to Plugin node_modules dir
+        if: ${{ (inputs.sync-npm-package) && (inputs.sync-npm-package-name != '') }}
+        run: rsync -r -v -h "vendor/${{ inputs.module-repo }}/build/" "node_modules/@${{ inputs.sync-npm-package-name }}/build"
 
       - name: Build Plugin
         run: npm run build
