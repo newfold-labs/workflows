@@ -198,7 +198,7 @@ jobs:
         if: ${{ steps.build.outputs.hasBuildCommand != 'false' }}
         run: npm run build
 
-      - name: Sync Module build files to Plugin's node_modules dir
+      - name: Sync Module build files to Plugin node_modules dir
         if: ${{ (inputs.sync-npm-package) && (inputs.sync-npm-package-name != '') }}
         run: rsync -r -v -h "vendor/${{ inputs.module-repo }}/build/" "node_modules/@${{ inputs.sync-npm-package-name }}/build"
 
