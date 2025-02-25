@@ -1,0 +1,43 @@
+# Instructions for Using the Translation Workflow:
+# Detailed guidelines for utilizing the translation workflow can be found in Section 5.12 
+# of our documentation: [How We Work](https://newfold-labs.github.io/how-we-work/5.12-crowdin-translation-workflow.html).
+
+name: Crowdin Upload Action
+
+on:
+  workflow_call:
+    secrets:
+      GITHUB_TOKEN:
+        required: true
+      CROWDIN_PERSONAL_TOKEN:
+        required: true
+    vars:
+      CROWDIN_PROJECT_ID:
+        required: true
+
+permissions:
+  contents: write        
+  pull-requests: write   
+
+jobs:
+  synchronize-with-crowdin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: crowdin action
+        uses: crowdin/github-action@v2
+        with:
+          upload_sources: true
+          upload_translations: true
+          download_translations: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+          # A numeric ID, found at https://crowdin.com/project/<projectName>/tools/api
+          CROWDIN_PROJECT_ID: ${{ vars.CROWDIN_PROJECT_ID }}
+
+          # Visit https://crowdin.com/settings#api-key to create this token
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
