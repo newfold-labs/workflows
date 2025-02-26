@@ -13,8 +13,6 @@ on:
         default: 'main'
         type: string
     secrets:
-      GITHUB_TOKEN:
-        required: true
       CROWDIN_PERSONAL_TOKEN:
         required: true
     vars:
