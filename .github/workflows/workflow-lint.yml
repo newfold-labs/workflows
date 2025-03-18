@@ -5,10 +5,10 @@ on:
   push:
     paths:
       - '**.yml'
-    pull_request:
-      types: [ opened, edited, synchronize, reopened, ready_for_review ]
-      paths:
-        - '**.yml'
+  pull_request:
+    types: [ opened, edited, synchronize, reopened, ready_for_review ]
+    paths:
+      - '**.yml'
 
 # Cancels all previous workflow runs for pull requests that have not completed.
 concurrency:
