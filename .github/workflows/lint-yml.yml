@@ -2,6 +2,9 @@ name: Lint YML
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
+      - develop
     paths:
       - '**.yml'
     pull_request:
