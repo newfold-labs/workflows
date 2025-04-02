@@ -130,3 +130,40 @@ jobs:
         with:
           sarif_file: results.sarif
           category: poutine
+
+  # Performs a scan of GitHub Action workflow files using Zizmor.
+  #
+  # Zizmor is a static analysis tool for GitHub Actions that can find many common security issues in typical setups.
+  #
+  # Performs the following steps:
+  # - Checks out the repository.
+  # - Installs uv.
+  # - Runs Zizmor.
+  # - Uploads a SARIF file to GitHub.
+  zizmor:
+    name: Zizmor
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+          show-progress: ${{ runner.debug == '1' && 'true' || 'false' }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182 # v5.4.1
+
+      - name: Run zizmor
+        run: uvx zizmor@1.1.1 --format sarif . > results.sarif
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3
+        with:
+          sarif_file: results.sarif
+          category: zizmor
