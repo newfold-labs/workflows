@@ -123,6 +123,9 @@ jobs:
           node --version
           npm --version
 
+      - name: Validate composer.json and composer.lock
+        run: composer validate
+
       - name: Install PHP Dependencies for Plugin
         run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
 
@@ -149,10 +152,6 @@ jobs:
         if: ${{ (inputs.secondary-module-branch != '') && (inputs.secondary-module-repo != '') }}
         working-directory: vendor/${{ inputs.secondary-module-repo }}
         run: git checkout --track origin/${{ inputs.secondary-module-branch }}
-
-      - name: Validate composer.json and composer.lock
-        working-directory: vendor/${{ inputs.module-repo }}
-        run: composer validate
 
       - name: Install Module PHP Dependencies
         working-directory: vendor/${{ inputs.module-repo }}
