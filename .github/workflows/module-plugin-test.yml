@@ -141,19 +141,26 @@ jobs:
         run: composer reinstall ${{ inputs.module-repo }} --prefer-source
 
       - name: Checkout Module Branch
-        continue-on-error: true
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         if: ${{ inputs.module-branch != 'main' }}
-        working-directory: vendor/${{ inputs.module-repo }}
-        run: git checkout --track origin/${{ inputs.module-branch }}
+        with:
+          repository: newfold-labs/${{ inputs.module-repo }}
+          ref: ${{ inputs.module-branch }}
+          path: vendor/${{ inputs.module-repo }}
+          persist-credentials: false
 
       - name: Get Secondary Module Source
         if: ${{ inputs.secondary-module-repo != '' }}
         run: composer reinstall ${{ inputs.secondary-module-repo }} --prefer-source
 
       - name: Checkout Secondary Module Branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         if: ${{ (inputs.secondary-module-branch != '') && (inputs.secondary-module-repo != '') }}
-        working-directory: vendor/${{ inputs.secondary-module-repo }}
-        run: git checkout --track origin/${{ inputs.secondary-module-branch }}
+        with:
+          repository: newfold-labs/${{ inputs.secondary-module-repo }}
+          ref: ${{ inputs.secondary-module-branch }}
+          path: vendor/${{ inputs.secondary-module-repo }}
+          persist-credentials: false
 
       - name: Validate composer.json and composer.lock
         working-directory: vendor/${{ inputs.module-repo }}
