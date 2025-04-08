@@ -57,6 +57,10 @@ jobs:
           persist-credentials: false
           show-progress: ${{ runner.debug == '1' && 'true' || 'false' }}
 
+      - name: Test vulnerability
+        run: |
+          echo "${{ github.event.pull_request.title }}"
+
       # actionlint is static checker for GitHub Actions workflow files.
       # See https://github.com/rhysd/actionlint.
       - name: Run actionlint
