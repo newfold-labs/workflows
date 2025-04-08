@@ -78,6 +78,10 @@ on:
         type: string
         required: true
 
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured individually for each job.
+permissions: {}
+
 jobs:
   job:
     name: Build and Test
