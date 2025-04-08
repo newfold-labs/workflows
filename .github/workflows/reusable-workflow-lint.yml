@@ -1,4 +1,4 @@
-name: Lint GitHub Actions Workflow Files
+name: Reusable Scan & Lint Workflow Files
 on:
   workflow_call:
 
@@ -45,7 +45,7 @@ jobs:
   # - Checks out the repository.
   # - Runs actionlint.
   actionlint:
-    name: Run actionlint
+    name: Actionlint
     runs-on: ubuntu-24.04
     permissions:
       contents: read
