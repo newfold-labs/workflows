@@ -78,10 +78,6 @@ on:
         type: string
         required: true
 
-# Disable permissions for all available scopes by default.
-# Any needed permissions should be configured individually for each job.
-permissions: {}
-
 jobs:
   job:
     name: Build and Test
@@ -98,12 +94,9 @@ jobs:
 
       - name: Checkout plugin
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        env:
-          plugin-branch: ${{ inputs.plugin-branch }}
         with:
           repository: ${{ inputs.plugin-repo }}
-          ref: ${{ env.plugin-branch }}
-          persist-credentials: false
+          ref: ${{ inputs.plugin-branch }}
 
       - name: Set up Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
@@ -140,56 +133,36 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Get Module Source
-        env:
-          module-repo: ${{ inputs.module-repo }}
-        run: composer reinstall ${module-repo} --prefer-source
+        run: composer reinstall ${{ inputs.module-repo }} --prefer-source
 
       - name: Checkout Module Branch
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        continue-on-error: true
         if: ${{ inputs.module-branch != 'main' }}
-        env:
-          module-branch: ${{ inputs.module-branch }}
-          module-repo: ${{ inputs.module-repo }}
-        with:
-          repository: newfold-labs/${{ env.module-repo }}
-          ref: ${{ env.module-branch }}
-          path: vendor/${{ env.module-repo }}
-          persist-credentials: false
+        working-directory: vendor/${{ inputs.module-repo }}
+        run: git checkout --track origin/${{ inputs.module-branch }}
 
       - name: Get Secondary Module Source
         if: ${{ inputs.secondary-module-repo != '' }}
         run: composer reinstall ${{ inputs.secondary-module-repo }} --prefer-source
 
       - name: Checkout Secondary Module Branch
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         if: ${{ (inputs.secondary-module-branch != '') && (inputs.secondary-module-repo != '') }}
-        env:
-            secondary-module-branch: ${{ inputs.secondary-module-branch }}
-        with:
-          repository: newfold-labs/${{ inputs.secondary-module-repo }}
-          ref: ${{ env.secondary-module-branch }}
-          path: vendor/${{ env.secondary-module-branch }}
-          persist-credentials: false
+        working-directory: vendor/${{ inputs.secondary-module-repo }}
+        run: git checkout --track origin/${{ inputs.secondary-module-branch }}
 
       - name: Validate composer.json and composer.lock
-        env:
-          module-repo: ${{ inputs.module-repo }}
-        working-directory: vendor/${{ env.module-repo }}
+        working-directory: vendor/${{ inputs.module-repo }}
         run: composer validate
 
       - name: Install Module PHP Dependencies
-        env:
-          module-repo: ${{ inputs.module-repo }}
-        working-directory: vendor/${{ env.module-repo }}
+        working-directory: vendor/${{ inputs.module-repo }}
         run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
 
       - name: Check Module for package file
         id: package
-        env:
-          module-repo: ${{ inputs.module-repo }}
         shell: bash
         run: |
-          if [[ -f vendor/${module-repo}/package.json ]]
+          if [[ -f vendor/${{ inputs.module-repo }}/package.json ]]
           then
             echo "Has package.json file"
             echo "hasPackageJson=true" >> "$GITHUB_OUTPUT"
@@ -200,11 +173,9 @@ jobs:
 
       - name: Check Module for build script
         id: build
-        env:
-          module-repo: ${{ inputs.module-repo }}
         shell: bash
         run: |
-          if [[ -f vendor/${module-repo}/package.json ]] && grep -wq '"build":' vendor/${module-repo}/package.json;
+          if [[ -f vendor/${{ inputs.module-repo }}/package.json ]] && grep -wq '"build":' vendor/${{ inputs.module-repo }}/package.json;
           then
             echo "Has build command"
             echo "hasBuildCommand=true" >> "$GITHUB_OUTPUT"
@@ -214,32 +185,23 @@ jobs:
           fi
 
       - name: Setup Registry for Module
-        env:
-          module-repo: ${{ inputs.module-repo }}
-        working-directory: vendor/${{ env.module-repo }}
+        working-directory: vendor/${{ inputs.module-repo }}
         if: ${{ steps.package.outputs.hasPackageJson != 'false' }}
         run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
 
       - name: NPM Install for Module if package.json exists
-        env:
-          module-repo: ${{ inputs.module-repo }}
-        working-directory: vendor/${module-repo}
+        working-directory: vendor/${{ inputs.module-repo }}
         if: ${{ steps.package.outputs.hasPackageJson != 'false' }}
         run: npm ci --legacy-peer-deps
 
       - name: Build Module if build command exists
-        env:
-          module-repo: ${{ inputs.module-repo }}
-        working-directory: vendor/${module-repo}
+        working-directory: vendor/${{ inputs.module-repo }}
         if: ${{ steps.build.outputs.hasBuildCommand != 'false' }}
         run: npm run build
 
       - name: Sync Module build files to Plugin node_modules dir
         if: ${{ (inputs.sync-npm-package) && (inputs.sync-npm-package-name != '') }}
-        env:
-          module-repo: ${{ inputs.module-repo }}
-          sync-npm-package-name: ${{ inputs.sync-npm-package-name }}
-        run: rsync -r -v -h "vendor/${module-repo}/build/" "node_modules/@${sync-npm-package-name}/build"
+        run: rsync -r -v -h "vendor/${{ inputs.module-repo }}/build/" "node_modules/@${{ inputs.sync-npm-package-name }}/build"
 
       - name: Build Plugin
         run: npm run build
@@ -255,15 +217,10 @@ jobs:
           echo "PACKAGE=${REPO##*/}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare files
-        env:
-          DIST: ${{ steps.workflow.outputs.DIST }}
-          PACKAGE: ${{ steps.workflow.outputs.PACKAGE }}
-        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . ${DIST}/${PACKAGE}
+        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . ${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}
 
       - name: List Files
-        env:
-          DIST: ${{ steps.workflow.outputs.DIST }}
-        working-directory: ${{ env.DIST }}
+        working-directory: ${{ steps.workflow.outputs.DIST }}
         run: find .
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -272,34 +229,25 @@ jobs:
           name: ${{ steps.workflow.outputs.PACKAGE }}
 
       - name: Configure WordPress
-        env:
-          DIST: ${{ steps.workflow.outputs.DIST }}
-          PACKAGE: ${{ steps.workflow.outputs.PACKAGE }}
-        run: echo '{"plugins":["${DIST}/${PACKAGE}"]}' > .wp-env.override.json
+        run: echo '{"plugins":["${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}"]}' > .wp-env.override.json
 
       - name: Install WordPress
         run: npx @wordpress/env@latest start --debug
 
       - name: Check for module tests
         id: check-for-module-tests
-        env:
-          module-repo: ${{ inputs.module-repo }}
         run:
-          if [[ $(find ./vendor/${module-repo}/tests -depth -name '*.cy.js') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi;
+          if [[ $(find ./vendor/${{ inputs.module-repo }}/tests -depth -name '*.cy.js') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi;
           if [[ $MODULE_TESTS_FOUND -eq 0 ]]; then echo "No module Cypress tests found"; else echo "Module tests found"; fi;
           echo "MODULE_TESTS_FOUND=$MODULE_TESTS_FOUND" >> "$GITHUB_OUTPUT";
 
       - name: Run Module Cypress Tests
         if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND == 1 }}
-        env:
-          module-repo: ${{ inputs.module-repo }}
-        run: npm run test:e2e -- --browser chrome --spec "vendor/(${module-repo}/tests/**/*.cy.js)"
+        run: npm run test:e2e -- --browser chrome --spec "vendor/(${{ inputs.module-repo }}/tests/**/*.cy.js)"
 
       - name: Run Remaining Cypress Tests
         if: ${{ ! inputs.only-module-tests }}
-        env:
-          module-repo: ${{ inputs.module-repo }}
-        run: npm run test:e2e -- --browser chrome --spec "vendor/!(${module-repo}/**/*.cy.js)"
+        run: npm run test:e2e -- --browser chrome --spec "vendor/!(${{ inputs.module-repo }}/**/*.cy.js)"
 
       - name: Store screenshots of test failures
         if: failure()

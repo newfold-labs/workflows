@@ -12,16 +12,13 @@ on:
       NEWFOLD_ACCESS_TOKEN:
         required: true
 
-# Disable permissions for all available scopes by default.
-# Any needed permissions should be configured individually for each job.
-permissions: {}
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   update-i18n:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
 
     steps:
       - name: Checkout Repository

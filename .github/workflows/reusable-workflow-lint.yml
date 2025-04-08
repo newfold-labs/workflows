@@ -2,8 +2,6 @@ name: Reusable Scan & Lint Workflow Files
 on:
   workflow_call:
 
-# Disable permissions for all available scopes by default.
-# Any needed permissions should be configured individually for each job.
 permissions: {}
 
 jobs:
@@ -58,10 +56,6 @@ jobs:
         with:
           persist-credentials: false
           show-progress: ${{ runner.debug == '1' && 'true' || 'false' }}
-
-      - name: Test vulnerability
-        run: |
-          echo "${{ github.event.pull_request.title }}"
 
       # actionlint is static checker for GitHub Actions workflow files.
       # See https://github.com/rhysd/actionlint.
