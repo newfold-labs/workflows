@@ -23,7 +23,7 @@ permissions: {}
 
 jobs:
   verify-module-plugin-test:
-    name: ${{ matrix.name }} (${{ matrix.module }}) w/PHP ${{ matrix.php-version }}
+    name: ${{ matrix.name }} (${{ ( matrix.only-module-tests && 'all tests with ' || '' ) && matrix.module }})
     strategy:
       fail-fast: false
       matrix:
@@ -31,7 +31,6 @@ jobs:
         brand: [ 'bluehost', 'crazydomains', 'hostgator', 'mojo', 'web.com' ]
         # Mission-critical modules that are included in all brand plugins.
         module: [ 'activation', 'wpasswords', 'data', 'performance' ]
-        php-version: [ '7.4', '8.2' ]
         only-module-tests: [ true ]
 
         include:
@@ -85,7 +84,6 @@ jobs:
 
     uses: ./.github/workflows/module-plugin-test.yml
     with:
-      php-version: ${{ matrix.php-version }}
       plugin-repo: ${{ matrix.plugin-repo }}
       module-repo: newfold-labs/wp-module-${{ matrix.module }}
       module-branch: 'main'
