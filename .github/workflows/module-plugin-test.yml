@@ -85,7 +85,7 @@ on:
 
 jobs:
   job:
-    name: ${{ inputs.name }} on PHP ${{ inputs.php-version }} ${{ inputs.artifact-name || '' }}
+    name: Build and Test
     runs-on: ubuntu-latest
     steps:
       - name: Setup PHP

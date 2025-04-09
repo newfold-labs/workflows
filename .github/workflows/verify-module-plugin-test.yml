@@ -28,7 +28,7 @@ jobs:
       fail-fast: false
       matrix:
         brand: [ 'bluehost', 'crazydomains', 'hostgator', 'mojo', 'web.com' ]
-        module: [ 'wp-module-activation', 'wp-module-coming-soon', 'wp-module-data' ]
+        module: [ 'wp-module-activation', 'wp-module-onboarding', 'wp-module-data', 'wp-module-patterns', 'wp-module-performance' ]
         php-version: [ '7.4', '8.2' ]
 
         include:
@@ -47,6 +47,33 @@ jobs:
           - brand: 'web.com'
             name: 'Web.com'
             plugin-repo: 'newfold-labs/wp-plugin-web'
+
+          # Include one job for each brand plugin that runs all tests.
+          - brand: 'bluehost'
+            name: 'Bluehost'
+            plugin-repo: 'newfold-labs/wp-plugin-bluehost'
+            module: 'wp-module-secure-passwords'
+
+          - brand: 'crazydomains'
+            name: 'Crazy Domains'
+            plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
+            module: 'wp-module-ai'
+
+          - brand: 'hostgator'
+            name: 'HostGator'
+            plugin-repo: 'newfold-labs/wp-plugin-hostgator'
+            module: 'wp-module-onboarding'
+
+          - brand: 'mojo'
+            name: 'Mojo'
+            plugin-repo: 'newfold-labs/wp-plugin-mojo'
+            module: 'wp-module-secure-passwords'
+
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+            module: 'wp-module-coming-soon'
+
     uses: ./.github/workflows/module-plugin-test.yml
     with:
       php-version: ${{ matrix.php-version }}
