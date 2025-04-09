@@ -85,7 +85,7 @@ on:
 
 jobs:
   job:
-    name: ${{ inputs.name }} on PHP ${{ inputs.php }} / ${{ inputs.module }}
+    name: ${{ inputs.name }} on PHP ${{ inputs.php-version }} / ${{ inputs.module }}
     runs-on: ubuntu-latest
     steps:
       - name: Setup PHP

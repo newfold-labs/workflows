@@ -23,7 +23,7 @@ permissions: {}
 
 jobs:
   verify-module-plugin-test:
-    name: ${{ matrix.name }} on PHP ${{ matrix.php }} / ${{ matrix.module }}
+    name: ${{ matrix.name }} on PHP ${{ matrix.php-version }} / ${{ matrix.module }}
     strategy:
       fail-fast: false
       matrix:
