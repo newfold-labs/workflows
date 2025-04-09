@@ -46,5 +46,6 @@ jobs:
     uses: ./.github/workflows/module-plugin-test.yml
     with:
       module-repo: newfold-labs/${{ matrix.module }}
+      module-branch: 'main'
       plugin-repo: ${{ matrix.plugin-repo }}
       node-version: '20'
