@@ -52,3 +52,4 @@ jobs:
       module-branch: 'main'
       plugin-repo: ${{ matrix.plugin-repo }}
       node-version: '20'
+      artifact-name: ${{ matrix.module }}
