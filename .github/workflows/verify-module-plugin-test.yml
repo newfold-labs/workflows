@@ -23,12 +23,13 @@ permissions: {}
 
 jobs:
   verify-module-plugin-test:
-    name: ${{ matrix.name }} ${{ matrix.module }}
+    name: ${{ matrix.name }} on PHP ${{ matrix.php }} / ${{ matrix.module }}
     strategy:
       fail-fast: false
       matrix:
         brand: [ 'bluehost', 'crazydomains', 'hostgator', 'mojo', 'web.com' ]
         module: [ 'wp-module-activation', 'wp-module-coming-soon', 'wp-module-data' ]
+        php-version: [ '7.4', '8.2' ]
 
         include:
           - brand: 'bluehost'
@@ -48,8 +49,9 @@ jobs:
             plugin-repo: 'newfold-labs/wp-plugin-web'
     uses: ./.github/workflows/module-plugin-test.yml
     with:
+      php-version: ${{ matrix.php-version }}
+      plugin-repo: ${{ matrix.plugin-repo }}
       module-repo: newfold-labs/${{ matrix.module }}
       module-branch: 'main'
-      plugin-repo: ${{ matrix.plugin-repo }}
       node-version: '20'
       artifact-name: ${{ matrix.module }}

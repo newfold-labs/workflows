@@ -85,7 +85,7 @@ on:
 
 jobs:
   job:
-    name: Build and Test
+    name: ${{ inputs.name }} on PHP ${{ inputs.php }} / ${{ inputs.module }}
     runs-on: ubuntu-latest
     steps:
       - name: Setup PHP
