@@ -28,9 +28,9 @@ jobs:
       fail-fast: false
       matrix:
         # The brand plugins to test against.
-        brand: [ 'bluehost', 'crazydomains', 'hostgator', 'mojo', 'web.com' ]
+        brand: [ 'bluehost', 'hostgator', 'web.com' ]
         # Mission-critical modules that are included in all brand plugins.
-        module: [ 'activation', 'wpasswords', 'data', 'performance' ]
+        module: [ 'activation', 'secure-passwords', 'data', 'performance' ]
         only-module-tests: [ true ]
 
         include:
@@ -58,28 +58,29 @@ jobs:
             module: 'onboarding'
             only-module-tests: false
 
-          - brand: 'crazydomains'
-            name: 'Crazy Domains'
-            plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
-            module: 'ai'
-            only-module-tests: false
-
           - brand: 'hostgator'
             name: 'HostGator'
             plugin-repo: 'newfold-labs/wp-plugin-hostgator'
             module: 'patterns'
             only-module-tests: false
 
-          - brand: 'mojo'
-            name: 'Mojo'
-            plugin-repo: 'newfold-labs/wp-plugin-mojo'
-            module: 'secure-passwords'
-            only-module-tests: false
-
           - brand: 'web.com'
             name: 'Web.com'
             plugin-repo: 'newfold-labs/wp-plugin-web'
             module: 'coming-soon'
+            only-module-tests: false
+
+          # Include one job for each deprecated brand plugins.
+          - brand: 'crazydomains'
+            name: 'Crazy Domains'
+            plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
+            module: 'ai'
+            only-module-tests: false
+
+          - brand: 'mojo'
+            name: 'Mojo'
+            plugin-repo: 'newfold-labs/wp-plugin-mojo'
+            module: 'notifications'
             only-module-tests: false
 
     uses: ./.github/workflows/module-plugin-test.yml
