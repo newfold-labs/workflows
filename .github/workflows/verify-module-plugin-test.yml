@@ -1,4 +1,6 @@
+# Verifies changes to the brand plugin testing workflow.
 name: Verify Module Plugin Testing
+
 on:
   push:
     branches:
@@ -10,7 +12,7 @@ on:
     types: [ opened, edited, synchronize, reopened, ready_for_review ]
     paths:
       - '**.yml'
-      -
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
   cancel-in-progress: true
@@ -23,6 +25,7 @@ jobs:
   verify-module-plugin-test:
     name: ${{ matrix.name }} ${{ matrix.module }}
     strategy:
+      fail-fast: false
       matrix:
         brand: [ 'bluehost', 'crazydomains', 'hostgator', 'mojo', 'web.com' ]
         module: [ 'wp-module-activation', 'wp-module-coming-soon', 'wp-module-data' ]
