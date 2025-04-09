@@ -21,7 +21,7 @@ permissions: {}
 
 jobs:
   verify-module-plugin-test:
-    name: ${{ matrix.name }} / ${{ matrix.module }}
+    name: ${{ matrix.name }} ${{ matrix.module }}
     strategy:
       matrix:
         brand: [ 'bluehost', 'crazydomains', 'hostgator', 'mojo', 'web.com' ]
