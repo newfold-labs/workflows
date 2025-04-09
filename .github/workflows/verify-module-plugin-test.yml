@@ -30,7 +30,7 @@ jobs:
         # The brand plugins to test against.
         brand: [ 'bluehost', 'crazydomains', 'hostgator', 'mojo', 'web.com' ]
         # Mission-critical modules that are included in all brand plugins.
-        module: [ 'wp-module-activation', 'wp-module-secure-passwords', 'wp-module-data', 'wp-module-patterns', 'wp-module-performance' ]
+        module: [ 'activation', 'wpasswords', 'data', 'performance' ]
         php-version: [ '7.4', '8.2' ]
         only-module-tests: [ true ]
 
@@ -56,39 +56,39 @@ jobs:
           - brand: 'bluehost'
             name: 'Bluehost'
             plugin-repo: 'newfold-labs/wp-plugin-bluehost'
-            module: 'wp-module-onboarding'
+            module: 'onboarding'
             only-module-tests: false
 
           - brand: 'crazydomains'
             name: 'Crazy Domains'
             plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
-            module: 'wp-module-ai'
+            module: 'ai'
             only-module-tests: false
 
           - brand: 'hostgator'
             name: 'HostGator'
             plugin-repo: 'newfold-labs/wp-plugin-hostgator'
-            module: 'wp-module-onboarding'
+            module: 'patterns'
             only-module-tests: false
 
           - brand: 'mojo'
             name: 'Mojo'
             plugin-repo: 'newfold-labs/wp-plugin-mojo'
-            module: 'wp-module-secure-passwords'
+            module: 'secure-passwords'
             only-module-tests: false
 
           - brand: 'web.com'
             name: 'Web.com'
             plugin-repo: 'newfold-labs/wp-plugin-web'
-            module: 'wp-module-coming-soon'
+            module: 'coming-soon'
             only-module-tests: false
 
     uses: ./.github/workflows/module-plugin-test.yml
     with:
       php-version: ${{ matrix.php-version }}
       plugin-repo: ${{ matrix.plugin-repo }}
-      module-repo: newfold-labs/${{ matrix.module }}
+      module-repo: newfold-labs/wp-module-${{ matrix.module }}
       module-branch: 'main'
       node-version: '20'
       only-module-tests: ${{ matrix.only-module-tests }}
-      artifact-name: ${{ matrix.module }}
+      artifact-name: wp-module-${{ matrix.module }}
