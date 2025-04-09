@@ -54,4 +54,5 @@ jobs:
       module-repo: newfold-labs/${{ matrix.module }}
       module-branch: 'main'
       node-version: '20'
+      only-module-tests: true
       artifact-name: ${{ matrix.module }}
