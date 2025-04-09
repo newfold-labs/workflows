@@ -85,7 +85,7 @@ on:
 
 jobs:
   job:
-    name: ${{ inputs.name }} on PHP ${{ inputs.php-version }} / ${{ inputs.module }}
+    name: ${{ inputs.name }} on PHP ${{ inputs.php-version }} ${{ inputs.artifact-name || '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Setup PHP
@@ -231,7 +231,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           path: ${{ steps.workflow.outputs.DIST }}
-          name: ${{ steps.workflow.outputs.PACKAGE }}${{ inputs.artifact-name != '' && format('test-{0}', inputs.artifact-name ) || '' }}
+          name: ${{ steps.workflow.outputs.PACKAGE }}${{ inputs.artifact-name != '' && format('test-{0}-php-{1}', inputs.artifact-name, inputs.php-version ) || '' }}
 
       - name: Configure WordPress
         run: echo '{"plugins":["${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}"]}' > .wp-env.override.json
