@@ -1,0 +1,50 @@
+name: Verify Module Plugin Testing
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - '**.yml'
+  pull_request:
+    types: [ opened, edited, synchronize, reopened, ready_for_review ]
+    paths:
+      - '**.yml'
+      -
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  cancel-in-progress: true
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured individually for each job.
+permissions: {}
+
+jobs:
+  verify-module-plugin-test:
+    name: ${{ matrix.name }} Build and Test
+    strategy:
+      matrix:
+        brand: [ 'bluehost', 'crazydomains', 'hostgator', 'mojo', 'web.com' ]
+        module: [ 'wp-module-activation', 'wp-module-coming-soon', 'wp-module-data' ]
+
+        include:
+          - brand: 'bluehost'
+            name: 'Bluehost'
+            plugin-repo: 'newfold-labs/wp-plugin-bluehost'
+          - brand: 'crazydomains'
+            name: 'Crazy Domains'
+            plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
+          - brand: 'hostgator'
+            name: 'HostGator'
+            plugin-repo: 'newfold-labs/wp-plugin-hostgator'
+          - brand: 'mojo'
+            name: 'Mojo'
+            plugin-repo: 'newfold-labs/wp-plugin-mojo'
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+    uses: ./.github/workflows/module-plugin-test.yml
+    with:
+      module-repo: newfold-labs/${{ matrix.module }}
+      plugin-repo: ${{ matrix.plugin-repo }}
+      node-version: '20'
