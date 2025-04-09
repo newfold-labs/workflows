@@ -23,15 +23,19 @@ permissions: {}
 
 jobs:
   verify-module-plugin-test:
-    name: ${{ matrix.name }} on PHP ${{ matrix.php-version }} / ${{ matrix.module }}
+    name: ${{ matrix.name }} (${{ matrix.module }}) w/PHP ${{ matrix.php-version }}
     strategy:
       fail-fast: false
       matrix:
+        # The brand plugins to test against.
         brand: [ 'bluehost', 'crazydomains', 'hostgator', 'mojo', 'web.com' ]
-        module: [ 'wp-module-activation', 'wp-module-onboarding', 'wp-module-data', 'wp-module-patterns', 'wp-module-performance' ]
+        # Mission-critical modules that are included in all brand plugins.
+        module: [ 'wp-module-activation', 'wp-module-secure-passwords', 'wp-module-data', 'wp-module-patterns', 'wp-module-performance' ]
         php-version: [ '7.4', '8.2' ]
+        only-module-tests: [ true ]
 
         include:
+          # Define the plugin-repo value for each brand plugin.
           - brand: 'bluehost'
             name: 'Bluehost'
             plugin-repo: 'newfold-labs/wp-plugin-bluehost'
@@ -52,27 +56,32 @@ jobs:
           - brand: 'bluehost'
             name: 'Bluehost'
             plugin-repo: 'newfold-labs/wp-plugin-bluehost'
-            module: 'wp-module-secure-passwords'
+            module: 'wp-module-onboarding'
+            only-module-tests: false
 
           - brand: 'crazydomains'
             name: 'Crazy Domains'
             plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
             module: 'wp-module-ai'
+            only-module-tests: false
 
           - brand: 'hostgator'
             name: 'HostGator'
             plugin-repo: 'newfold-labs/wp-plugin-hostgator'
             module: 'wp-module-onboarding'
+            only-module-tests: false
 
           - brand: 'mojo'
             name: 'Mojo'
             plugin-repo: 'newfold-labs/wp-plugin-mojo'
             module: 'wp-module-secure-passwords'
+            only-module-tests: false
 
           - brand: 'web.com'
             name: 'Web.com'
             plugin-repo: 'newfold-labs/wp-plugin-web'
             module: 'wp-module-coming-soon'
+            only-module-tests: false
 
     uses: ./.github/workflows/module-plugin-test.yml
     with:
@@ -81,5 +90,5 @@ jobs:
       module-repo: newfold-labs/${{ matrix.module }}
       module-branch: 'main'
       node-version: '20'
-      only-module-tests: true
+      only-module-tests: ${{ matrix.only-module-tests }}
       artifact-name: ${{ matrix.module }}

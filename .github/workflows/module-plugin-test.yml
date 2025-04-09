@@ -85,7 +85,7 @@ on:
 
 jobs:
   job:
-    name: Build and Test ${{ inputs.module-repo }}
+    name: Build and Test
     runs-on: ubuntu-latest
     steps:
       - name: Setup PHP
