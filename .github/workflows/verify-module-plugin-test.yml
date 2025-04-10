@@ -89,5 +89,5 @@ jobs:
       module-repo: newfold-labs/wp-module-${{ matrix.module }}
       module-branch: 'main'
       node-version: '20'
-      only-module-tests: ${{ matrix.only-module-tests }}
+      only-module-tests: ${{ matrix.only-module-tests && 'true' || 'false' }}
       artifact-name: wp-module-${{ matrix.module }}
