@@ -29,52 +29,77 @@ jobs:
       matrix:
         # The brand plugins to test against.
         brand: [ 'bluehost', 'hostgator', 'web.com' ]
-        # Mission-critical modules that are included in all brand plugins.
-        module: [ 'activation', 'atomic', 'coming-soon', 'context', 'data', 'deactivation', 'features', 'loader', 'marketplace', 'notifications', 'performance', 'runtime', 'secure-passwords', 'sso' ]
+        # Modules with Cypress tests that are included in all active brand plugins.
+        module: [ 'coming-soon', 'deactivation', 'features',  'marketplace', 'notifications', 'performance' ]
         only-module-tests: [ true ]
 
         include:
-          # Define the plugin-repo value for each brand plugin.
+          # Define a plugin-repo value for each brand plugin.
           - brand: 'bluehost'
-            name: 'Bluehost'
             plugin-repo: 'newfold-labs/wp-plugin-bluehost'
           - brand: 'hostgator'
-            name: 'HostGator'
             plugin-repo: 'newfold-labs/wp-plugin-hostgator'
           - brand: 'web.com'
-            name: 'Web.com'
             plugin-repo: 'newfold-labs/wp-plugin-web'
 
-          # Include one job for each brand plugin that runs all tests.
+          # Include one job for each brand plugin with a module lacking Cypress tests.
+          #
+          # Current modules included in all brand plugins lacking Cypress tests:
+          # - ai (Bluehost only)
+          # - activation
+          # - atomic
+          # - context
+          # - data
+          # - facebook (Bluehost & HostGator only)
+          # - loader
+          # - onboarding-data (Bluehost only)
+          # - pls (Bluehost only)
+          # - runtime
+          # - secure-passwords
+          # - sso
           - brand: 'bluehost'
             name: 'Bluehost'
             plugin-repo: 'newfold-labs/wp-plugin-bluehost'
             module: 'ai'
             only-module-tests: false
+          - brand: 'hostgator'
+            name: 'HostGator'
+            plugin-repo: 'newfold-labs/wp-plugin-hostgator'
+            module: 'facebook'
+            only-module-tests: false
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+            module: 'secure-passwords'
+            only-module-tests: false
 
+          # Include one job for each brand plugin that runs all tests.
+          - brand: 'bluehost'
+            name: 'Bluehost'
+            plugin-repo: 'newfold-labs/wp-plugin-bluehost'
+            module: 'staging'
+            only-module-tests: false
           - brand: 'hostgator'
             name: 'HostGator'
             plugin-repo: 'newfold-labs/wp-plugin-hostgator'
             module: 'global-ctb'
             only-module-tests: false
-
           - brand: 'web.com'
             name: 'Web.com'
             plugin-repo: 'newfold-labs/wp-plugin-web'
-            module: 'data'
+            module: 'notifications'
             only-module-tests: false
 
-          # Include one job for each deprecated brand plugins.
+          # Include one job for each retired brand plugin.
           - brand: 'crazydomains'
             name: 'Crazy Domains'
             plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
-            module: 'onboarding'
+            module: 'performance'
             only-module-tests: false
-
           - brand: 'mojo'
             name: 'Mojo'
             plugin-repo: 'newfold-labs/wp-plugin-mojo'
-            module: 'notifications'
+            module: 'coming-soon'
             only-module-tests: false
 
     uses: ./.github/workflows/module-plugin-test.yml
