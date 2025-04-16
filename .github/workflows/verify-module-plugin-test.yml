@@ -1,0 +1,115 @@
+# Verifies changes to the brand plugin testing workflow.
+name: Verify Module Plugin Testing
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - '**.yml'
+  pull_request:
+    types: [ opened, edited, synchronize, reopened, ready_for_review ]
+    paths:
+      - '**.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  cancel-in-progress: true
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured individually for each job.
+permissions: {}
+
+jobs:
+  verify-module-plugin-test:
+    name: ${{ matrix.name }} (${{ format( '{0}{1}', ( ! matrix.only-module-tests && 'all tests with ' || '' ), matrix.module ) }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # The brand plugins to test against.
+        brand: [ 'bluehost', 'hostgator', 'web.com' ]
+        # Modules with Cypress tests that are included in all active brand plugins.
+        module: [ 'coming-soon', 'deactivation', 'features',  'marketplace', 'notifications', 'performance' ]
+        only-module-tests: [ true ]
+
+        include:
+          # Define a plugin-repo value for each brand plugin.
+          - brand: 'bluehost'
+            name: 'Bluehost'
+            plugin-repo: 'newfold-labs/wp-plugin-bluehost'
+          - brand: 'hostgator'
+            name: 'HostGator'
+            plugin-repo: 'newfold-labs/wp-plugin-hostgator'
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+
+          # Include one job for each brand plugin with a module lacking Cypress tests.
+          #
+          # Current modules included in all brand plugins lacking Cypress tests:
+          # - ai (Bluehost only)
+          # - activation
+          # - atomic
+          # - context
+          # - data
+          # - facebook (Bluehost & HostGator only)
+          # - loader
+          # - onboarding-data (Bluehost only)
+          # - pls (Bluehost only)
+          # - runtime
+          # - secure-passwords
+          # - sso
+          - brand: 'bluehost'
+            name: 'Bluehost'
+            plugin-repo: 'newfold-labs/wp-plugin-bluehost'
+            module: 'ai'
+            only-module-tests: false
+          - brand: 'hostgator'
+            name: 'HostGator'
+            plugin-repo: 'newfold-labs/wp-plugin-hostgator'
+            module: 'facebook'
+            only-module-tests: false
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+            module: 'secure-passwords'
+            only-module-tests: false
+
+          # Include one job for each brand plugin that runs all tests.
+          - brand: 'bluehost'
+            name: 'Bluehost'
+            plugin-repo: 'newfold-labs/wp-plugin-bluehost'
+            module: 'staging'
+            only-module-tests: false
+          - brand: 'hostgator'
+            name: 'HostGator'
+            plugin-repo: 'newfold-labs/wp-plugin-hostgator'
+            module: 'global-ctb'
+            only-module-tests: false
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+            module: 'notifications'
+            only-module-tests: false
+
+          # Include one job for each retired brand plugin.
+          - brand: 'crazydomains'
+            name: 'Crazy Domains'
+            plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
+            module: 'performance'
+            only-module-tests: false
+          - brand: 'mojo'
+            name: 'Mojo'
+            plugin-repo: 'newfold-labs/wp-plugin-mojo'
+            module: 'coming-soon'
+            only-module-tests: false
+
+    uses: ./.github/workflows/module-plugin-test.yml
+    with:
+      plugin-repo: ${{ matrix.plugin-repo }}
+      module-repo: newfold-labs/wp-module-${{ matrix.module }}
+      module-branch: 'main'
+      node-version: '20'
+      only-module-tests: ${{ matrix.only-module-tests && true || false }}
+      artifact-name: wp-module-${{ matrix.module }}
