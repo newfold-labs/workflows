@@ -36,10 +36,13 @@ jobs:
         include:
           # Define a plugin-repo value for each brand plugin.
           - brand: 'bluehost'
+            name: 'Bluehost'
             plugin-repo: 'newfold-labs/wp-plugin-bluehost'
           - brand: 'hostgator'
+            name: 'HostGator'
             plugin-repo: 'newfold-labs/wp-plugin-hostgator'
           - brand: 'web.com'
+            name: 'Web.com'
             plugin-repo: 'newfold-labs/wp-plugin-web'
 
           # Include one job for each brand plugin with a module lacking Cypress tests.
