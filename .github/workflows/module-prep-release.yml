@@ -84,7 +84,7 @@ jobs:
       - name: Check for set-version-bump.js
         id: check_file
         run: |
-          if [ ! -f .github/scripts/set-version-bump.js ]; then VERSION_SCRIPT_FOUND=1; else VERSION_SCRIPT_FOUND=0; fi;
+          if [ -f .github/scripts/set-version-bump.js ]; then VERSION_SCRIPT_FOUND=1; else VERSION_SCRIPT_FOUND=0; fi;
           if [[ $VERSION_SCRIPT_FOUND -eq 0 ]]; then echo "No versioning script found"; else echo "Versioning script found"; fi;
           echo "VERSION_SCRIPT_FOUND=$VERSION_SCRIPT_FOUND" >> $GITHUB_OUTPUT;
 
@@ -92,7 +92,7 @@ jobs:
       - name: Check set-version-bump.js is executable
         id: check_executable
         run: |
-          if [ ! -x .github/scripts/set-version-bump.js ]; then VERSION_SCRIPT_ACCESS=1; else VERSION_SCRIPT_ACCESS=0; fi;
+          if [ -x .github/scripts/set-version-bump.js ]; then VERSION_SCRIPT_ACCESS=1; else VERSION_SCRIPT_ACCESS=0; fi;
           if [[ $VERSION_SCRIPT_ACCESS -eq 0 ]]; then echo "No versioning script access"; else echo "Versioning script access"; fi;
           echo "VERSION_SCRIPT_ACCESS=$VERSION_SCRIPT_ACCESS" >> $GITHUB_OUTPUT;
 
