@@ -11,11 +11,11 @@ on:
   workflow_call:
     inputs:
       module-repo:
-        description: The module repo
+        description: The module repo.
         type: string
         required: true
       module-branch:
-        description: The branch of the module to be tested
+        description: The branch of the module to use.
         type: string
         required: true
       level:
@@ -121,7 +121,7 @@ jobs:
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
         with:
           token: ${{ github.token }}
-          base: trunk
+          base: ${{ inputs.module-branch }}
           branch: release/${{ steps.version_bump.outputs.new_version }}
           title: "Automated ${{ inputs.level }} Release ${{ steps.version_bump.outputs.new_version }} PR"
           body: "This PR was created automatically by a GitHub Action."
