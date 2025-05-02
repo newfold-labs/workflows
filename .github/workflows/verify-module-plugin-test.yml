@@ -98,12 +98,10 @@ jobs:
             name: 'Crazy Domains'
             plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
             module: 'performance'
-            only-module-tests: false
           - brand: 'mojo'
             name: 'Mojo'
             plugin-repo: 'newfold-labs/wp-plugin-mojo'
             module: 'coming-soon'
-            only-module-tests: false
 
     uses: ./.github/workflows/module-plugin-test.yml
     with:
