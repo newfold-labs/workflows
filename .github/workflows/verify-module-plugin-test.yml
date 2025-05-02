@@ -7,11 +7,11 @@ on:
       - main
       - develop
     paths:
-      - '**.yml'
+      - '**module-plugin-test.yml'
   pull_request:
     types: [ opened, edited, synchronize, reopened, ready_for_review ]
     paths:
-      - '**.yml'
+      - '**module-plugin-test.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
