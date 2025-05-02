@@ -226,7 +226,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           path: ${{ steps.workflow.outputs.DIST }}
-          name: ${{ steps.workflow.outputs.PACKAGE }}
+          name: ${{ steps.workflow.outputs.PACKAGE }}-${{ inputs.plugin-repo }}-${{ inputs.module-repo }}-${{ inputs.module-branch }}${{ inputs.secondary-module-repo && inputs.secondary-module-branch && format( '-{0}-{1}', inputs.secondary-module-repo, inputs.secondary-module-branch ) || '' }}
 
       - name: Configure WordPress
         run: echo '{"plugins":["${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}"]}' > .wp-env.override.json

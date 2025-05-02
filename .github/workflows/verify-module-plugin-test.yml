@@ -30,7 +30,7 @@ jobs:
         # The brand plugins to test against.
         brand: [ 'bluehost', 'hostgator', 'web.com' ]
         # Modules with Cypress tests that are included in all active brand plugins.
-        module: [ 'coming-soon', 'deactivation', 'features',  'marketplace', 'notifications', 'performance' ]
+        module: [ 'coming-soon', 'deactivation', 'features', 'marketplace', 'notifications', 'performance' ]
         only-module-tests: [ true ]
 
         include:
