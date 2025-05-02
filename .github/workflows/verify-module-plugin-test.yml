@@ -112,4 +112,4 @@ jobs:
       module-branch: 'main'
       node-version: '20'
       only-module-tests: ${{ matrix.only-module-tests && true || false }}
-      artifact-name: ${{ format( 'wp-plugin-{0}-{1}-{2}-{3}', matrix.brand, matrix.module, matrix.only-module-tests && 'module-only' || 'all, strategy.job-index ) }}
+      artifact-name: ${{ format( 'wp-plugin-{0}-{1}-{2}', matrix.brand, matrix.module, strategy.job-index ) }}
