@@ -37,10 +37,10 @@ jobs:
 
       - name: Run i18n Scripts
         run: |
-          npm run i18n-pot
-          npm run i18n-po
-          npm run i18n-php
-          npm run i18n-json
+          composer i18n-pot
+          composer i18n-po
+          composer i18n-php
+          composer i18n-json
 
       - name: Configure Git
         run: |
