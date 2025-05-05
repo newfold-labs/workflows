@@ -23,7 +23,7 @@ permissions: {}
 
 jobs:
   verify-module-plugin-test:
-    name: ${{ matrix.name }} (${{ format( '{0}{1}', ( ! matrix.only-module-tests && 'all tests with ' || '' ), matrix.module ) }})
+    name: ${{ matrix.name }} (${{ format( '{0}{1}{2}', matrix.module, ( matrix.secondary-module-repo && format( '{0}{1}', ' with ', matrix.secondary-module-repo ) || '' ), ( ! matrix.only-module-tests && ' - all tests' || '' ) ) }})
     strategy:
       fail-fast: false
       matrix:
