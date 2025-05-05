@@ -22,7 +22,12 @@ concurrency:
 permissions: {}
 
 jobs:
-  verify-module-plugin-test:
+    # The following methodology is applied when building out the matrix below:
+    #
+    # - One job per brand plugin runs all tests.
+    # - One module per brand plugin with missing Cypress tests is tested. The rest are excluded.
+    # - All modules containing Cypress tests bundled with all three brand plugins are tested.
+    # - Each retired brand plugin is tested once in combination with a module containing Cypress tests.
     name: ${{ matrix.name }} (${{ format( '{0}{1}{2}', matrix.module, ( matrix.secondary-module-repo && format( '{0}{1}', ' with ', matrix.secondary-module-repo ) || '' ), ( ! matrix.only-module-tests && ' - all tests' || '' ) ) }})
     strategy:
       fail-fast: false
