@@ -53,14 +53,17 @@ jobs:
             name: 'Bluehost'
             module: 'hosting'
             secondary-module-repo: 'installer'
+            only-module-tests: true
           - brand: 'hostgator'
             name: 'HostGator'
             module: 'help-center'
             secondary-module-repo: 'migration'
+            only-module-tests: true
           - brand: 'web.com'
             name: 'Web.com'
             module: 'notifications'
             secondary-module-repo: 'performance'
+            only-module-tests: true
 
           # Include one job for each brand plugin with a module lacking Cypress tests.
           #
