@@ -105,19 +105,14 @@ jobs:
 
           # Define the plugin-repo value for each brand plugin.
           - brand: 'bluehost'
-            name: 'Bluehost'
             plugin-repo: 'newfold-labs/wp-plugin-bluehost'
           - brand: 'hostgator'
-            name: 'HostGator'
             plugin-repo: 'newfold-labs/wp-plugin-hostgator'
           - brand: 'web.com'
-            name: 'Web.com'
             plugin-repo: 'newfold-labs/wp-plugin-web'
           - brand: 'crazydomains'
-            name: 'Crazy Domains'
             plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
           - brand: 'mojo'
-            name: 'Mojo'
             plugin-repo: 'newfold-labs/wp-plugin-mojo'
 
     uses: ./.github/workflows/module-plugin-test.yml
