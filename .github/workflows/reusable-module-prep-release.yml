@@ -89,24 +89,32 @@ jobs:
       - name: Check for set-version-bump.js
         id: check_file
         run: |
-          if [ -f .github/scripts/set-version-bump.js ]; then VERSION_SCRIPT_FOUND=1; else VERSION_SCRIPT_FOUND=0; fi;
-          if [[ $VERSION_SCRIPT_FOUND -eq 0 ]]; then echo "No versioning script found"; else echo "Versioning script found"; fi;
+          if [ -f .github/scripts/set-version-bump.js ]; then
+            VERSION_SCRIPT_FOUND=1
+            echo "Versioning script found"
+          else
+            echo "No versioning script found"
+          fi
           echo "VERSION_SCRIPT_FOUND=$VERSION_SCRIPT_FOUND" >> $GITHUB_OUTPUT;
 
-      - name: Run Update Version Script and Parse Output
+      - name: Run version script
+        if: ${{ steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1 }}
+        id: run_version_script
+        run: |
+          TEMP_FILE="$RUNNER_TEMP/version_output.json"
+          echo "Running version bump script..."
+          node ./.github/scripts/set-version-bump.js ${{ inputs.level }} > "$TEMP_FILE"
+          echo "output_file=$TEMP_FILE" >> $GITHUB_OUTPUT
+
+      - name: Parse version script output
         if: ${{ steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1 }}
         id: version_bump
         run: |
-          echo "Running version bump script..."
-          OUTPUT=$(node ./.github/scripts/set-version-bump.js ${{ inputs.level }})
-          echo ""
-          echo "====== Script Output ======"
-          echo "$OUTPUT"
-          echo "==========================="
-          echo ""
-          echo "new_version=$(echo "$OUTPUT" | jq -r '.newVersion')" >> $GITHUB_OUTPUT
-          echo "old_version=$(echo "$OUTPUT" | jq -r '.oldVersion')" >> $GITHUB_OUTPUT
-          echo "message=$(echo "$OUTPUT" | jq -r '.message')" >> $GITHUB_OUTPUT
+          FILE="${{ steps.run_version_script.outputs.output_file }}"
+          echo "Parsing version output from: $FILE"
+          echo "new_version=$(jq -r '.newVersion' "$FILE")" >> $GITHUB_OUTPUT
+          echo "old_version=$(jq -r '.oldVersion' "$FILE")" >> $GITHUB_OUTPUT
+          echo "message=$(jq -r '.message' "$FILE")" >> $GITHUB_OUTPUT
 
       - name: Run Build and Update Language Files
         if: ${{ steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1 }}
