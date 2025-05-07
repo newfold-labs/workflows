@@ -1,11 +1,7 @@
+##
+# This reusable workflow is used in modules to perp a release.
+##
 name: Prepare Release
-# This workflow is manually dispatched. It:
-# - bumps the version as specified in the input
-# - prepares build artifacts
-# - creates a release branch
-# - commits the changes
-# - creates a pull request to the main branch
-# - TODO: consider skipping the PR, push to main, and create a release automatically
 
 on:
   workflow_call:
@@ -25,6 +21,14 @@ on:
         required: true
 
 jobs:
+  # This job is used to prepare a release.
+  #
+  # It does the following:
+  # - Bumps the version as specified in the input
+  # - Prepares build artifacts
+  # - Creates a release branch
+  # - Commits the changes
+  # - Creates a pull request to the main branch
   prep-release:
     name: Prepare Release
     runs-on: ubuntu-latest
@@ -61,8 +65,6 @@ jobs:
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-composer-
 
       - name: Show versions
         run: |
@@ -80,7 +82,6 @@ jobs:
       - name: Install Packages
         run: npm install
 
-      # check set-version-bump exists
       - name: Check for set-version-bump.js
         id: check_file
         run: |
@@ -88,9 +89,8 @@ jobs:
           if [[ $VERSION_SCRIPT_FOUND -eq 0 ]]; then echo "No versioning script found"; else echo "Versioning script found"; fi;
           echo "VERSION_SCRIPT_FOUND=$VERSION_SCRIPT_FOUND" >> $GITHUB_OUTPUT;
 
-      # run the set-version-bump.js script with the level input
-      - name: Run Update Version Script
-        if: steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1
+      - name: Run Update Version Script and Parse Output
+        if: ${{ steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1 }}
         id: version_bump
         run: |
           echo "Running version bump script..."
@@ -104,20 +104,13 @@ jobs:
           echo "old_version=$(echo "$OUTPUT" | jq -r '.oldVersion')" >> $GITHUB_OUTPUT
           echo "message=$(echo "$OUTPUT" | jq -r '.message')" >> $GITHUB_OUTPUT
 
-      # run the post-set-version script
       - name: Run Build and Update Language Files
-        if: steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1
+        if: ${{ steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1 }}
         run: npm run post-set-version
-
-      # run build command if the versioning script was not found
-      # - name: Run Build and Update Language Files
-      #   if: steps.check_file.outputs.VERSION_SCRIPT_FOUND == 0
-      #   run: |
-      #     npm run build
-      #     composer run i18n
 
       # create the release branch, commit the changes, and create pull request
       - name: Create Release Pull Request
+        if: steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
         with:
           token: ${{ github.token }}
