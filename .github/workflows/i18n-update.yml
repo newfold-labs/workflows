@@ -71,16 +71,19 @@ jobs:
       - name: Create Pull Request
         if: env.changed == 'true'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          BASE_BRANCH: ${{ inputs.base_branch }}
         with:
           github-token: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const branch = process.env.branch_name;
+            const base = process.env.BASE_BRANCH;
             github.rest.pulls.create({
               owner,
               repo,
               title: "Update i18n translation files",
               head: branch,
-              base: "${{ inputs.base_branch }}",
+              base: base,
               body: "This PR updates the i18n translation files.",
             });
