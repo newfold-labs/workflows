@@ -83,6 +83,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     steps:
+
       - name: Setup PHP
         uses: shivammathur/setup-php@9e72090525849c5e82e596468b86eb55e9cc5401 # v2.32.0
         with:
@@ -237,17 +238,17 @@ jobs:
       - name: Check for module tests
         id: check-for-module-tests
         run:
-          if [[ $(find ./vendor/${{ inputs.module-repo }}/tests -depth -name '*.cy.js') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi;
+          if [[ $(find ./vendor/${{ inputs.module-repo }}/tests/cypress/integration -depth -name '*.cy.js') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi;
           if [[ $MODULE_TESTS_FOUND -eq 0 ]]; then echo "No module Cypress tests found"; else echo "Module tests found"; fi;
           echo "MODULE_TESTS_FOUND=$MODULE_TESTS_FOUND" >> $GITHUB_OUTPUT;
 
       - name: Run Module Cypress Tests
         if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND == 1 }}
-        run: npm run test:e2e -- --browser chrome --spec "vendor/(${{ inputs.module-repo }}/tests/**/*.cy.js)"
+        run: npm run test:e2e -- --browser chrome --spec "vendor/(${{ inputs.module-repo }}/tests/cypress/integration/*.cy.js),vendor/(${{ inputs.module-repo }}/tests/cypress/integration/**/*.cy.js)"
 
       - name: Run Remaining Cypress Tests
         if: ${{ ! inputs.only-module-tests }}
-        run: npm run test:e2e -- --browser chrome --spec "vendor/!(${{ inputs.module-repo }}/**/*.cy.js)"
+        run: npm run test:e2e -- --browser chrome --spec "tests/cypress/integration/**/*.cy.js,vendor/!(${{ inputs.module-repo }}/tests/cypress/integration/*.cy.js),vendor/!(${{ inputs.module-repo }}/tests/cypress/integration/**/*.cy.js)"
 
       - name: Store screenshots of test failures
         if: failure()
@@ -259,4 +260,4 @@ jobs:
       - name: Output debug.log file contents
         if: always()
         continue-on-error: true
-        run: npx wp-env run wordpress "cat /var/www/html/wp-content/debug.log"
+        run: npx wp-env run wordpress cat /var/www/html/wp-content/debug.log
