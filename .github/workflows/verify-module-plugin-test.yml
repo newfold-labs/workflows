@@ -131,6 +131,13 @@ jobs:
             module: 'coming-soon'
             only-module-tests: true
 
+        exclude:
+          # The Web.com plugin currently excludes tests for the coming-soon module in its test configuration.
+          # This causes a failure because Cypress tests are present, but none are found.
+          # See https://github.com/newfold-labs/wp-plugin-web/blob/main/cypress.config.js#L87.
+          - brand: 'web.com'
+            module: 'coming-soon'
+
     uses: ./.github/workflows/module-plugin-test.yml
     with:
       plugin-repo: ${{ matrix.plugin-repo }}
