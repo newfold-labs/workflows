@@ -63,9 +63,9 @@ jobs:
         if: env.changed == 'true'
         run: |
           BRANCH_NAME="update-i18n-$(date +%Y%m%d%H%M%S)"
-          git checkout -b "$BRANCH_NAME"
+          git checkout -b $BRANCH_NAME
           git commit -m "Update i18n translation files"
-          git push origin "$BRANCH_NAME"
+          git push origin $BRANCH_NAME
           echo "branch_name=$BRANCH_NAME" >> $GITHUB_ENV
 
       - name: Create Pull Request
