@@ -19,7 +19,7 @@ on:
       CROWDIN_PERSONAL_TOKEN:
         required: true
       NEWFOLD_ACCESS_TOKEN:
-        requred: true
+        required: true
 
 permissions:
   contents: write
