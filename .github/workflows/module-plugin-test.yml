@@ -112,7 +112,7 @@ jobs:
 
       - name: Get Composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer vendor directory
         uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
@@ -171,10 +171,10 @@ jobs:
           if [[ -f vendor/${{ inputs.module-repo }}/package.json ]]
           then
             echo "Has package.json file"
-            echo "hasPackageJson=true" >> $GITHUB_OUTPUT
+            echo "hasPackageJson=true" >> "$GITHUB_OUTPUT"
           else
             echo "Does not have package.json file"
-            echo "hasPackageJson=false" >> $GITHUB_OUTPUT
+            echo "hasPackageJson=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Check Module for build script
@@ -184,10 +184,10 @@ jobs:
           if [[ -f vendor/${{ inputs.module-repo }}/package.json ]] && grep -wq '"build":' vendor/${{ inputs.module-repo }}/package.json;
           then
             echo "Has build command"
-            echo "hasBuildCommand=true" >> $GITHUB_OUTPUT
+            echo "hasBuildCommand=true" >> "$GITHUB_OUTPUT"
           else
             echo "Does not have build command"
-            echo "hasBuildCommand=false" >> $GITHUB_OUTPUT
+            echo "hasBuildCommand=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup Registry for Module
@@ -219,8 +219,8 @@ jobs:
           REPO: ${{ inputs.plugin-repo }}
         run: |
           mkdir dist
-          echo "DIST=${PWD}/dist" >> $GITHUB_OUTPUT
-          echo "PACKAGE=${REPO##*/}" >> $GITHUB_OUTPUT
+          echo "DIST=${PWD}/dist" >> "$GITHUB_OUTPUT"
+          echo "PACKAGE=${REPO##*/}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare files
         run: rsync -r --include-from=.distinclude --exclude-from=.distignore . ${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}
@@ -245,7 +245,7 @@ jobs:
         run:
           if [[ $(find ./vendor/${{ inputs.module-repo }}/tests/cypress/integration -depth -name '*.cy.js') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi;
           if [[ $MODULE_TESTS_FOUND -eq 0 ]]; then echo "No module Cypress tests found"; else echo "Module tests found"; fi;
-          echo "MODULE_TESTS_FOUND=$MODULE_TESTS_FOUND" >> $GITHUB_OUTPUT;
+          echo "MODULE_TESTS_FOUND=$MODULE_TESTS_FOUND" >> "$GITHUB_OUTPUT";
 
       - name: Run Module Cypress Tests
         if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND == 1 }}
