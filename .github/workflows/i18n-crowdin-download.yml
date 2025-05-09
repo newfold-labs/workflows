@@ -18,6 +18,8 @@ on:
     secrets:
       CROWDIN_PERSONAL_TOKEN:
         required: true
+      NEWFOLD_ACCESS_TOKEN:
+        requred: true
 
 permissions:
   contents: write
