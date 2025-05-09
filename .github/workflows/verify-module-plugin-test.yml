@@ -146,3 +146,4 @@ jobs:
       node-version: '20'
       only-module-tests: ${{ matrix.only-module-tests && true || false }}
       artifact-name: ${{ format( 'wp-plugin-{0}-{1}-{2}', matrix.brand, matrix.module, strategy.job-index ) }}
+    secrets: inherit
