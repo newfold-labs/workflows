@@ -132,6 +132,39 @@ jobs:
             echo echo "⚠️ Warning: post-set-version script not defined. Skipping step."
           fi
 
+      - name: Get merged PRs since last tag
+        id: merged-prs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+
+          # Get the latest tag (lightweight or annotated)
+          LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1` || echo "")
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No previous tag found. Skipping PR listing."
+            echo "prs=No previous releases found. Showing all changes manually." >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Latest tag: $LATEST_TAG"
+
+          # Get the commit date of the tag
+          TAG_DATE=$(git log -1 --format=%cI "$LATEST_TAG")
+
+          # Fetch merged PRs to the branch since the last tag
+          MERGED_PRS=$(gh pr list --state merged --search "base:${{ inputs.module-branch }}" --json title,number,mergedAt --jq \
+            "[.[] | select(.mergedAt > \"$TAG_DATE\") | \"- #\(.number) \(.title)\"] | join(\"\\n\")")
+
+          if [ -z "$MERGED_PRS" ]; then
+            MERGED_PRS="(No pull requests merged since last release)"
+          fi
+
+          echo "prs<<EOF" >> $GITHUB_OUTPUT
+          echo "$MERGED_PRS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       # create the release branch, commit the changes, and create pull request
       - name: Create Release Pull Request
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
@@ -141,11 +174,26 @@ jobs:
           branch: release/${{ steps.new.outputs.version }}
           title: "Automated ${{ inputs.level }} release: ${{ steps.new.outputs.version }}"
           body:  |
-            ## Changes in this release
+            ## Changes in this pull request
 
             - Bumped version from `${{ steps.old.outputs.version }}` to `${{ steps.new.outputs.version }}`
             - Updated build files
             - Updated language files
 
+            ## Merged PRs since last release
+
+            ${{ steps.merged-prs.outputs.prs }}
+
             _Generated automatically by CI workflow (see prep-release workflow)._
           commit-message: "🤖 prep for release ${{ steps.new.outputs.version }}"
+
+      - name: Write release summary to workflow summary
+        run: |
+          echo "## 🚀 Release Prep Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version bump**: ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release branch created**: \`release/${{ steps.new.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Pull request created**: [View PR](https://github.com/${{ inputs.module-repo }}/pulls?q=is%3Apr+is%3Aopen+release%2F${{ steps.new.outputs.version }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Merged PRs since last release" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.merged-prs.outputs.prs }}" >> $GITHUB_STEP_SUMMARY
