@@ -100,14 +100,14 @@ jobs:
         if: ${{ inputs.json-file != '' }}
         id: old
         run: |
-          OLD_VERSION=$(node -p "require('./package.json').version")
+          OLD_VERSION=$(node -p "require('./${{ inputs.json-file }}').version")
           echo "version=$OLD_VERSION" >> $GITHUB_OUTPUT
 
       - name: Update version in package.json
         if: ${{ inputs.json-file != '' }}
         id: new
         run: |
-          NEW_VERSION=$(npm version ${{ github.event.inputs.level }} --no-git-tag-version)
+          NEW_VERSION=$(npm version ${{ github.event.inputs.level }} --no-git-tag-version --prefix $(dirname "${{ inputs.json-file }}"))
           echo "version=${NEW_VERSION#v}" >> $GITHUB_OUTPUT
 
       - name: Update version in PHP file
@@ -115,11 +115,22 @@ jobs:
         run: |
           sed -i "s/${{ steps.old.outputs.version }}/${{ steps.new.outputs.version }}/g" ${{ inputs.php-file }}
 
-      # package file must define a post-set-version command
+      - name: Output summary
+        run: |
+          echo "Old version: ${{ steps.old.outputs.version }}"
+          echo "New version: ${{ steps.new.outputs.version }}"
+
+      # package file should define a post-set-version command
       # this is used to create a fresh build and/or update language files
       # and allows each module to define the commands to run here
       - name: Run Build and Update Language Files
-        run: npm run post-set-version
+        if: ${{ inputs.json-file != '' }}
+        run: |
+          if npm run | grep -q post-set-version; then
+            npm run post-set-version
+          else
+            echo echo "⚠️ Warning: post-set-version script not defined. Skipping step."
+          fi
 
       # create the release branch, commit the changes, and create pull request
       - name: Create Release Pull Request
@@ -127,7 +138,14 @@ jobs:
         with:
           token: ${{ github.token }}
           base: ${{ inputs.module-branch }}
-          branch: release/${{ steps.bump.outputs.new_version }}
-          title: "Automated ${{ inputs.level }} Release ${{ steps.bump.outputs.new_version }} PR"
-          body: "This PR was created automatically by a GitHub Action."
-          commit-message: "🤖 prep release - ${{ steps.bump.outputs.new_version }}"
+          branch: release/${{ steps.new.outputs.version }}
+          title: "Automated ${{ inputs.level }} release: ${{ steps.new.outputs.version }}"
+          body:  |
+            ## Changes in this release
+
+            - Bumped version from `${{ steps.old.outputs.version }}` to `${{ steps.new.outputs.version }}`
+            - Updated build files
+            - Updated language files
+
+            _Generated automatically by CI workflow (see prep-release workflow)._
+          commit-message: "🤖 prep for release ${{ steps.new.outputs.version }}"
