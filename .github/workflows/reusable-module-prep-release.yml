@@ -131,16 +131,32 @@ jobs:
           echo "Old version: ${{ steps.old.outputs.version }}"
           echo "New version: ${{ steps.new.outputs.version }}"
 
-      # package file should define a post-set-version command
-      # this is used to create a fresh build and/or update language files
-      # and allows each module to define the commands to run here
-      - name: Run Build and Update Language Files
+      # Module can define a custom post-set-version command
+      - name: Run post-set-version command
         if: ${{ inputs.json-file != '' }}
         run: |
           if npm run | grep -q post-set-version; then
             npm run post-set-version
           else
             echo echo "⚠️ Warning: post-set-version script not defined. Skipping step."
+          fi
+      
+      - name: Run build command
+        if: ${{ inputs.json-file != '' }}
+        run: |
+          if npm run | grep -q build; then
+            npm run build
+          else
+            echo "⚠️ Warning: build script not defined. Skipping step."
+          fi
+
+      - name: Run composer i18n command
+        if: ${{ inputs.php-file != '' }}
+        run: |
+          if composer run-script | grep -q i18n; then
+            composer run-script i18n
+          else
+            echo "⚠️ Warning: i18n script not defined. Skipping step."
           fi
 
       - name: List tags (debug)
