@@ -19,6 +19,16 @@ on:
         type: string
         default: 'patch'
         required: true
+      json-file:
+        description: The JSON file to be used.
+        type: string
+        default: 'package.json'
+        required: false
+      php-file:
+        description: The PHP file to be used.
+        type: string
+        default: 'bootstrap.php'
+        required: false
 
 # Disable permissions for all available scopes by default.
 # Any needed permissions should be configured at the job level.
@@ -81,53 +91,43 @@ jobs:
         run: composer validate
 
       - name: Install PHP Dependencies
-        run: composer install --no-dev --optimize-autoloader
+        run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
 
-      - name: Install Packages
-        run: npm install
+      - name: Install JS Dependencies
+        run: npm ci --legacy-peer-deps
 
-      - name: Check for set-version-bump.js
-        id: check_file
+      - name: Get old version
+        if: ${{ inputs.json-file != '' }}
+        id: old
         run: |
-          if [ -f .github/scripts/set-version-bump.js ]; then
-            VERSION_SCRIPT_FOUND=1
-            echo "Versioning script found"
-          else
-            echo "No versioning script found"
-          fi
-          echo "VERSION_SCRIPT_FOUND=$VERSION_SCRIPT_FOUND" >> $GITHUB_OUTPUT;
+          OLD_VERSION=$(node -p "require('./package.json').version")
+          echo "version=$OLD_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Run version script
-        if: ${{ steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1 }}
-        id: run_version_script
+      - name: Update version in package.json
+        if: ${{ inputs.json-file != '' }}
+        id: new
         run: |
-          TEMP_FILE="$RUNNER_TEMP/version_output.json"
-          echo "Running version bump script..."
-          node ./.github/scripts/set-version-bump.js ${{ inputs.level }} > "$TEMP_FILE"
-          echo "output_file=$TEMP_FILE" >> $GITHUB_OUTPUT
+          NEW_VERSION=$(npm version ${{ github.event.inputs.level }} --no-git-tag-version)
+          echo "version=${NEW_VERSION#v}" >> $GITHUB_OUTPUT
 
-      - name: Parse version script output
-        if: ${{ steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1 }}
-        id: version_bump
+      - name: Update version in PHP file
+        if: ${{ inputs.php-file != '' }}
         run: |
-          FILE="${{ steps.run_version_script.outputs.output_file }}"
-          echo "Parsing version output from: $FILE"
-          echo "new_version=$(jq -r '.newVersion' "$FILE")" >> $GITHUB_OUTPUT
-          echo "old_version=$(jq -r '.oldVersion' "$FILE")" >> $GITHUB_OUTPUT
-          echo "message=$(jq -r '.message' "$FILE")" >> $GITHUB_OUTPUT
+          sed -i "s/${{ steps.old.outputs.version }}/${{ steps.new.outputs.version }}/g" ${{ inputs.php-file }}
 
+      # package file must define a post-set-version command
+      # this is used to create a fresh build and/or update language files
+      # and allows each module to define the commands to run here
       - name: Run Build and Update Language Files
-        if: ${{ steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1 }}
         run: npm run post-set-version
 
       # create the release branch, commit the changes, and create pull request
       - name: Create Release Pull Request
-        if: steps.check_file.outputs.VERSION_SCRIPT_FOUND == 1
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
         with:
           token: ${{ github.token }}
           base: ${{ inputs.module-branch }}
-          branch: release/${{ steps.version_bump.outputs.new_version }}
-          title: "Automated ${{ inputs.level }} Release ${{ steps.version_bump.outputs.new_version }} PR"
+          branch: release/${{ steps.bump.outputs.new_version }}
+          title: "Automated ${{ inputs.level }} Release ${{ steps.bump.outputs.new_version }} PR"
           body: "This PR was created automatically by a GitHub Action."
-          commit-message: "🤖 prep release - ${{ steps.version_bump.outputs.message }}"
+          commit-message: "🤖 prep release - ${{ steps.bump.outputs.new_version }}"
