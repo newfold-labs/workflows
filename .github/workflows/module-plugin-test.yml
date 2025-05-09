@@ -51,6 +51,11 @@ on:
         type: boolean
         default: false
         required: false
+      artifact-name:
+        description: The name of the plugin artifact to upload.
+        type: string
+        default: ''
+        required: false
   workflow_dispatch:
     inputs:
       php-version:
@@ -83,6 +88,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     steps:
+
       - name: Setup PHP
         uses: shivammathur/setup-php@9e72090525849c5e82e596468b86eb55e9cc5401 # v2.32.0
         with:
@@ -226,7 +232,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           path: ${{ steps.workflow.outputs.DIST }}
-          name: ${{ steps.workflow.outputs.PACKAGE }}
+          name: ${{ inputs.artifact-name != '' && inputs.artifact-name || steps.workflow.outputs.PACKAGE }}
 
       - name: Configure WordPress
         run: echo '{"plugins":["${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}"]}' > .wp-env.override.json
@@ -237,26 +243,26 @@ jobs:
       - name: Check for module tests
         id: check-for-module-tests
         run:
-          if [[ $(find ./vendor/${{ inputs.module-repo }}/tests -depth -name '*.cy.js') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi;
+          if [[ $(find ./vendor/${{ inputs.module-repo }}/tests/cypress/integration -depth -name '*.cy.js') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi;
           if [[ $MODULE_TESTS_FOUND -eq 0 ]]; then echo "No module Cypress tests found"; else echo "Module tests found"; fi;
           echo "MODULE_TESTS_FOUND=$MODULE_TESTS_FOUND" >> $GITHUB_OUTPUT;
 
       - name: Run Module Cypress Tests
         if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND == 1 }}
-        run: npm run test:e2e -- --browser chrome --spec "vendor/(${{ inputs.module-repo }}/tests/**/*.cy.js)"
+        run: npm run test:e2e -- --browser chrome --spec "vendor/(${{ inputs.module-repo }}/tests/cypress/integration/*.cy.js),vendor/(${{ inputs.module-repo }}/tests/cypress/integration/**/*.cy.js)"
 
       - name: Run Remaining Cypress Tests
         if: ${{ ! inputs.only-module-tests }}
-        run: npm run test:e2e -- --browser chrome --spec "vendor/!(${{ inputs.module-repo }}/**/*.cy.js)"
+        run: npm run test:e2e -- --browser chrome --spec "tests/cypress/integration/**/*.cy.js,vendor/!(${{ inputs.module-repo }}/tests/cypress/integration/*.cy.js),vendor/!(${{ inputs.module-repo }}/tests/cypress/integration/**/*.cy.js)"
 
       - name: Store screenshots of test failures
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           path: ./tests/cypress/screenshots
-          name: ${{ steps.workflow.outputs.PACKAGE }}-screenshots
+          name: ${{ inputs.artifact-name != '' && inputs.artifact-name || steps.workflow.outputs.PACKAGE }}-screenshots
 
       - name: Output debug.log file contents
         if: always()
         continue-on-error: true
-        run: npx wp-env run wordpress "cat /var/www/html/wp-content/debug.log"
+        run: npx wp-env run wordpress cat /var/www/html/wp-content/debug.log
