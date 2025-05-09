@@ -18,7 +18,6 @@ on:
       level:
         description: The level of release to be used.
         type: string
-        default: 'patch'
         required: true
       json-file:
         description: The JSON file to be used.
