@@ -87,13 +87,16 @@ jobs:
           persist-credentials: false
           show-progress: ${{ runner.debug == '1' && 'true' || 'false' }}
 
-      # Rules that are replicated in actionlint are disabled.
+      # Several rules are disable.
+      # local-action: The sole purpose of this rule is to flag local action files because Octoscan cannot currently
+      # parse them. However, this is not actually the case and results in unnecessary noise.
+      # All other disabled rules are ones that are replicated in actionlint.
       - name: Run octoscan
         id: octoscan
         uses: synacktiv/action-octoscan@6b1cf2343893dfb9e5f75652388bd2dc83f456b0 # v1.0.0
         with:
           filter_triggers: ''
-          disable_rules: 'dangerous-write,shellcheck,credentials'
+          disable_rules: 'dangerous-write,shellcheck,credentials,local-action'
 
       - name: Upload SARIF file to GitHub
         uses: github/codeql-action/upload-sarif@1b549b9259bda1cb5ddde3b41741a82a2d15a841 # v3.28.13
