@@ -205,11 +205,11 @@ jobs:
 
       - name: Write release summary to workflow summary
         run: |
-          echo "## 🚀 Release Prep Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version bump**: ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Release branch created**: \`release/${{ steps.new.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Pull request created**: [View PR #${{ steps.create_pr.outputs.pull-request-number }}](${{ steps.create_pr.outputs.pull-request-url }})" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Merged PRs since last release" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.merged-prs.outputs.prs }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 🚀 Release Prep Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version bump**: ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Release branch created**: \`release/${{ steps.new.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Pull request created**: [View PR #${{ steps.create_pr.outputs.pull-request-number }}](${{ steps.create_pr.outputs.pull-request-url }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Merged PRs since last release" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.merged-prs.outputs.prs }}" >> "$GITHUB_STEP_SUMMARY"
