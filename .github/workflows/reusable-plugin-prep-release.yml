@@ -1,0 +1,230 @@
+##
+# This reusable workflow is used in plugins to prep a release.
+#
+# Similar to the module release workflow, but distinguishes target and source branches.
+##
+name: Reusable Plugin Prepare Release
+
+on:
+  workflow_call:
+    inputs:
+      plugin-repo:
+        description: The plugin repo.
+        type: string
+        required: true
+      plugin-target-branch:
+        description: The target (base) branch of the plugin.
+        type: string
+        default: 'main'
+        required: false
+      plugin-source-branch:
+        description: The source (head) branch of the plugin.
+        type: string
+        default: 'develop'
+        required: false
+      level:
+        description: The level of release to be used.
+        type: string
+        required: true
+      json-file:
+        description: The JSON file with version.
+        type: string
+        default: 'package.json'
+        required: false
+      php-file:
+        description: The PHP file with version constant.
+        type: string
+        default: 'bootstrap.php'
+        required: false
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured at the job level.
+permissions: {}
+
+jobs:
+  # This job is used to prepare a release.
+  #
+  # It does the following:
+  # - Checks out the plugin repo (develop branch)
+  # - Bumps the version as specified in the input
+  # - Prepares build artifact
+  # - Creates a release branch
+  # - Commits the changes
+  # - Creates a pull request to the main branch
+  prep-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    permissions:
+      # Give the default token permission to commit, push the changed files, and open a pull request.
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          repository: ${{ inputs.plugin-repo }}
+          ref: ${{ inputs.plugin-source-branch }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@cf4cade2721270509d5b1c766ab3549210a39a2a  # v2.33.0
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer, cs2pr
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Show versions
+        run: |
+          php --version
+          composer --version
+          node --version
+          npm --version
+
+      - name: Validate composer.json and composer.lock
+        run: composer validate
+
+      - name: Install PHP Dependencies
+        uses: ramsey/composer-install@a2636af0004d1c0499ffca16ac0b4cc94df70565 # v3.1.0
+        with:
+          composer-options: "--no-dev --optimize-autoloader --verbose"
+
+      - name: Install JS Dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Get old version
+        if: ${{ inputs.json-file != '' }}
+        id: old
+        run: |
+          OLD_VERSION=$(node -p "require('./${{ inputs.json-file }}').version")
+          echo "version=$OLD_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update version in package.json file
+        if: ${{ inputs.json-file != '' }}
+        id: new
+        run: |
+          NEW_VERSION=$(npm version ${{ github.event.inputs.level }} --no-git-tag-version --prefix $(dirname "${{ inputs.json-file }}"))
+          echo "version=${NEW_VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Update version in PHP file
+        if: ${{ inputs.php-file != '' }}
+        run: |
+          sed -i "s/${{ steps.old.outputs.version }}/${{ steps.new.outputs.version }}/g" ${{ inputs.php-file }}
+
+      - name: Output summary
+        run: |
+          echo "Old version: ${{ steps.old.outputs.version }}"
+          echo "New version: ${{ steps.new.outputs.version }}"
+
+      # plugin can define a custom post-set-version command
+      - name: Run post-set-version command
+        if: ${{ inputs.json-file != '' }}
+        run: |
+          if npm run | grep -q post-set-version; then
+            npm run post-set-version
+          else
+            echo echo "⚠️ Warning: post-set-version script not defined. Skipping step."
+          fi
+
+      - name: Remove old build files
+        if: ${{ inputs.json-file != '' }}
+        run: |
+          if [ -d "build" ]; then
+            rm -rf build
+          fi
+
+      - name: Run build command
+        if: ${{ inputs.json-file != '' }}
+        run: |
+          if npm run | grep -q build; then
+            npm run build
+          else
+            echo "⚠️ Warning: build script not defined. Skipping step."
+          fi
+
+      - name: Run composer i18n command
+        if: ${{ inputs.php-file != '' }}
+        run: |
+          if composer run-script | grep -q i18n; then
+            composer run-script i18n
+          else
+            echo "⚠️ Warning: i18n script not defined. Skipping step."
+          fi
+
+      - name: List tags (debug)
+        run: git tag --list
+
+      - name: Get merged PRs since last tag/release
+        id: merged-prs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+
+          # Get the latest tag
+          LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1` || echo "")
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No previous tag found. Skipping PR listing."
+            echo "prs=No previous releases found." >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Get the commit date of the tag
+          TAG_DATE=$(git log -1 --format=%cI "$LATEST_TAG")
+
+          echo "Repo: ${{ inputs.plugin-repo }}"
+          echo "Latest tag: $LATEST_TAG"
+          echo "Tag date: $TAG_DATE"
+
+          # Fetch merged PRs to the branch since the last tag
+          MERGED_PRS=$(gh pr list --repo "${{ inputs.plugin-repo }}" --state merged --search "base:${{ inputs.plugin-source-branch }}" --json title,number,mergedAt --jq \
+            "[.[] | select(.mergedAt > \"$TAG_DATE\") | \"- #\(.number) \(.title)\"] | join(\"\\n\")")
+
+          if [ -z "$MERGED_PRS" ]; then
+            MERGED_PRS="(No pull requests merged since last release)"
+          fi
+
+          echo "prs<<EOF" >> $GITHUB_OUTPUT
+          echo "$MERGED_PRS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # create the release branch, commit the changes, and create pull request
+      - name: Create Release Pull Request
+        id: create_pr
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
+        with:
+          token: ${{ github.token }}
+          base: ${{ inputs.plugin-target-branch }}
+          branch: release/${{ steps.new.outputs.version }}
+          title: "Automated ${{ inputs.level }} release: ${{ steps.new.outputs.version }}"
+          body: |
+            ## Changes in this pull request
+
+            - Bumped version from `${{ steps.old.outputs.version }}` to `${{ steps.new.outputs.version }}`
+            - Updated build files
+            - Updated language files
+
+            ## Merged PRs since last release
+
+            ${{ steps.merged-prs.outputs.prs }}
+
+            _Generated automatically by CI workflow (see prep-release workflow)._
+          commit-message: "🤖 prep for release - ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
+
+      - name: Write release summary to workflow summary
+        run: |
+          echo "## 🚀 Release Prep Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version bump**: ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release branch created**: \`release/${{ steps.new.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Pull request created**: [View PR #${{ steps.create_pr.outputs.pull-request-number }}](${{ steps.create_pr.outputs.pull-request-url }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Merged PRs since last release" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.merged-prs.outputs.prs }}" >> $GITHUB_STEP_SUMMARY
