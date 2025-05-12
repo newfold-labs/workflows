@@ -95,14 +95,14 @@ jobs:
         id: old
         run: |
           OLD_VERSION=$(node -p "require('./${{ inputs.json-file }}').version")
-          echo "version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Update version in package.json
         if: ${{ inputs.json-file != '' }}
         id: new
         run: |
           NEW_VERSION=$(npm version ${{ github.event.inputs.level }} --no-git-tag-version --prefix $(dirname "${{ inputs.json-file }}"))
-          echo "version=${NEW_VERSION#v}" >> $GITHUB_OUTPUT
+          echo "version=${NEW_VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Update version in PHP file
         if: ${{ inputs.php-file != '' }}
@@ -157,7 +157,7 @@ jobs:
 
           if [ -z "$LATEST_TAG" ]; then
             echo "No previous tag found. Skipping PR listing."
-            echo "prs=No previous releases found." >> $GITHUB_OUTPUT
+            echo "prs=No previous releases found." >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -176,9 +176,9 @@ jobs:
             MERGED_PRS="(No pull requests merged since last release)"
           fi
 
-          echo "prs<<EOF" >> $GITHUB_OUTPUT
-          echo "$MERGED_PRS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "prs<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$MERGED_PRS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       # create the release branch, commit the changes, and create pull request
       - name: Create Release Pull Request
