@@ -175,7 +175,7 @@ jobs:
           if [ -z "$MERGED_PRS" ]; then
             MERGED_PRS="(No pull requests merged since last release)"
           fi
-          
+
           {
             echo "prs<<EOF"
             echo "$MERGED_PRS"
