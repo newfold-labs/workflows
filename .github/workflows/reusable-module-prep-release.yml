@@ -101,7 +101,7 @@ jobs:
         if: ${{ inputs.json-file != '' }}
         id: new
         run: |
-          NEW_VERSION=$(npm version ${{ github.event.inputs.level }} --no-git-tag-version --prefix $(dirname "${{ inputs.json-file }}"))
+          NEW_VERSION=$(npm version "${{ github.event.inputs.level }}" --no-git-tag-version --prefix $(dirname "${{ inputs.json-file }}"))
           echo "version=${NEW_VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Update version in PHP file
@@ -153,7 +153,7 @@ jobs:
           set -e
 
           # Get the latest tag
-          LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1` || echo "")
+          LATEST_TAG=$(git describe --tags "${git rev-list --tags --max-count=1)" || echo "")
 
           if [ -z "$LATEST_TAG" ]; then
             echo "No previous tag found. Skipping PR listing."
