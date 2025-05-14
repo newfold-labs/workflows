@@ -108,8 +108,10 @@ jobs:
       - name: Update version in package.json file
         if: ${{ inputs.json-file != '' }}
         id: new
+        env:
+          RELEASE_LEVEL: ${{ inputs.level }}
         run: |
-          NEW_VERSION=$(npm version "${{ github.event.inputs.level }}" --no-git-tag-version --prefix "$(dirname "${{ inputs.json-file }}")")
+          NEW_VERSION=$(npm version "$RELEASE_LEVEL" --no-git-tag-version --prefix "$(dirname "${{ inputs.json-file }}")")
           echo "version=${NEW_VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Update version in PHP file
