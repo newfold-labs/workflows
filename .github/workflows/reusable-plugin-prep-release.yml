@@ -134,13 +134,20 @@ jobs:
 
       - name: Update version in PHP file
         if: ${{ inputs.php-file != '' }}
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+          PHP_FILE: ${{ inputs.php-file }}
         run: |
-          sed -i "s/${{ steps.old.outputs.version }}/${{ steps.new.outputs.version }}/g" ${{ inputs.php-file }}
+          sed -i "s/${OLD_VERSION}/${NEW_VERSION}/g" ${PHP_FILE}
 
       - name: Output summary
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
         run: |
-          echo "Old version: ${{ steps.old.outputs.version }}"
-          echo "New version: ${{ steps.new.outputs.version }}"
+          echo "Old version: ${OLD_VERSION}"
+          echo "New version: ${NEW_VERSION}"
 
       # plugin can define a custom post-set-version command
       - name: Run post-set-version command
