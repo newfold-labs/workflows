@@ -64,6 +64,7 @@ jobs:
         with:
           repository: ${{ inputs.plugin-repo }}
           ref: ${{ inputs.plugin-source-branch }}
+          persist-credentials: false
           fetch-depth: 0
           fetch-tags: true
 
@@ -103,7 +104,7 @@ jobs:
         id: old
         run: |
           RAW_VERSION=$(node -p "require('./${{ inputs.json-file }}').version")
-          
+
           # Validate the version follows expected semantic versioning pattern.
           if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
             echo "::error::Invalid version format detected: $RAW_VERSION"
@@ -119,13 +120,13 @@ jobs:
           RELEASE_LEVEL: ${{ inputs.level }}
         run: |
           RAW_VERSION=$(npm version "$RELEASE_LEVEL" --no-git-tag-version --prefix "$(dirname "${{ inputs.json-file }}")")
-          
+
           # Validate the version follows expected semantic versioning pattern.
           if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
             echo "::error::Invalid version format detected: $RAW_VERSION"
             exit 1
           fi
-          
+
           echo "version=${RAW_VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Update version in PHP file
