@@ -109,7 +109,7 @@ jobs:
         id: new
         run: |
           RAW_VERSION=$(npm version "${{ github.event.inputs.level }}" --no-git-tag-version --prefix "$(dirname "${{ inputs.json-file }}")")
-          
+
           # Validate the version follows expected semantic versioning pattern.
           if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
             echo "::error::Invalid version format detected: $RAW_VERSION"
@@ -191,7 +191,7 @@ jobs:
           fi
 
           {
-            echo "prs<<EOF"
+            echo "prs=<<EOF"
             echo "$MERGED_PRS"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
