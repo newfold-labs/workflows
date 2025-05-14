@@ -102,8 +102,10 @@ jobs:
       - name: Get old version
         if: ${{ inputs.json-file != '' }}
         id: old
+        env:
+          JSON_FILE: ${{ inputs.json-file }}
         run: |
-          RAW_VERSION=$(node -p "require('./${{ inputs.json-file }}').version")
+          RAW_VERSION=$(node -p "require('./${JSON_FILE}').version")
 
           # Validate the version follows expected semantic versioning pattern.
           if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
@@ -117,9 +119,10 @@ jobs:
         if: ${{ inputs.json-file != '' }}
         id: new
         env:
+          JSON_FILE: ${{ inputs.json-file }}
           RELEASE_LEVEL: ${{ inputs.level }}
         run: |
-          RAW_VERSION=$(npm version "$RELEASE_LEVEL" --no-git-tag-version --prefix "$(dirname "${{ inputs.json-file }}")")
+          RAW_VERSION=$(npm version "$RELEASE_LEVEL" --no-git-tag-version --prefix "$(dirname "${JSON_FILE}")")
 
           # Validate the version follows expected semantic versioning pattern.
           if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
@@ -181,6 +184,8 @@ jobs:
         id: merged-prs
         env:
           GH_TOKEN: ${{ github.token }}
+          PLUGIN_REPO: ${{ inputs.plugin-repo }}
+          PLUGIN_SOURCE_BRANCH: ${{ inputs.plugin-source-branch }}
         run: |
           set -e
 
@@ -196,12 +201,12 @@ jobs:
           # Get the commit date of the tag
           TAG_DATE=$(git log -1 --format=%cI "$LATEST_TAG")
 
-          echo "Repo: ${{ inputs.plugin-repo }}"
+          echo "Repo: ${PLUGIN_REPO}"
           echo "Latest tag: $LATEST_TAG"
           echo "Tag date: $TAG_DATE"
 
           # Fetch merged PRs to the branch since the last tag
-          MERGED_PRS=$(gh pr list --repo "${{ inputs.plugin-repo }}" --state merged --search "base:${{ inputs.plugin-source-branch }}" --json title,number,mergedAt --jq \
+          MERGED_PRS=$(gh pr list --repo "${PLUGIN_REPO}" --state merged --search "base:${PLUGIN_SOURCE_BRANCH}" --json title,number,mergedAt --jq \
             "[.[] | select(.mergedAt > \"$TAG_DATE\") | \"- #\(.number) \(.title)\"] | join(\"\\n\")")
 
           if [ -z "$MERGED_PRS" ]; then
