@@ -94,15 +94,29 @@ jobs:
         if: ${{ inputs.json-file != '' }}
         id: old
         run: |
-          OLD_VERSION=$(node -p "require('./${{ inputs.json-file }}').version")
-          echo "version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          RAW_VERSION=$(node -p "require('./${{ inputs.json-file }}').version")
+
+          # Validate the version follows expected semantic versioning pattern.
+          if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format detected: $RAW_VERSION"
+            exit 1
+          fi
+
+          echo "version=$RAW_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Update version in package.json
         if: ${{ inputs.json-file != '' }}
         id: new
         run: |
-          NEW_VERSION=$(npm version ${{ github.event.inputs.level }} --no-git-tag-version --prefix $(dirname "${{ inputs.json-file }}"))
-          echo "version=${NEW_VERSION#v}" >> $GITHUB_OUTPUT
+          RAW_VERSION=$(npm version "${{ github.event.inputs.level }}" --no-git-tag-version --prefix "$(dirname "${{ inputs.json-file }}")")
+
+          # Validate the version follows expected semantic versioning pattern.
+          if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format detected: $RAW_VERSION"
+            exit 1
+          fi
+
+          echo "version=${RAW_VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Update version in PHP file
         if: ${{ inputs.php-file != '' }}
@@ -153,11 +167,11 @@ jobs:
           set -e
 
           # Get the latest tag
-          LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1` || echo "")
+          LATEST_TAG=$(git describe --tags "$(git rev-list --tags --max-count=1)" || echo "")
 
           if [ -z "$LATEST_TAG" ]; then
             echo "No previous tag found. Skipping PR listing."
-            echo "prs=No previous releases found." >> $GITHUB_OUTPUT
+            echo "prs=No previous releases found." >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -176,9 +190,11 @@ jobs:
             MERGED_PRS="(No pull requests merged since last release)"
           fi
 
-          echo "prs<<EOF" >> $GITHUB_OUTPUT
-          echo "$MERGED_PRS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "prs=<<EOF"
+            echo "$MERGED_PRS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       # create the release branch, commit the changes, and create pull request
       - name: Create Release Pull Request
@@ -205,11 +221,13 @@ jobs:
 
       - name: Write release summary to workflow summary
         run: |
-          echo "## 🚀 Release Prep Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version bump**: ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Release branch created**: \`release/${{ steps.new.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Pull request created**: [View PR #${{ steps.create_pr.outputs.pull-request-number }}](${{ steps.create_pr.outputs.pull-request-url }})" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Merged PRs since last release" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.merged-prs.outputs.prs }}" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## 🚀 Release Prep Summary"
+            echo ""
+            echo "- **Version bump**: ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
+            echo "- **Release branch created**: \`release/${{ steps.new.outputs.version }}\`"
+            echo "- **Pull request created**: [View PR #${{ steps.create_pr.outputs.pull-request-number }}](${{ steps.create_pr.outputs.pull-request-url }})"
+            echo ""
+            echo "### Merged PRs since last release"
+            echo "${{ steps.merged-prs.outputs.prs }}"
+          }  >> "$GITHUB_STEP_SUMMARY"
