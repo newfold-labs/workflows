@@ -139,7 +139,7 @@ jobs:
           NEW_VERSION: ${{ steps.new.outputs.version }}
           PHP_FILE: ${{ inputs.php-file }}
         run: |
-          sed -i "s/${OLD_VERSION}/${NEW_VERSION}/g" ${PHP_FILE}
+          sed -i "s/${OLD_VERSION}/${NEW_VERSION}/g" "${PHP_FILE}"
 
       - name: Output summary
         env:
