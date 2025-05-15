@@ -148,7 +148,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Get Module Source
-        run: composer reinstall ${MODULE_REPO} --prefer-source
+        run: composer reinstall "${MODULE_REPO}" --prefer-source
 
       - name: Checkout Module Branch
         continue-on-error: true
@@ -156,20 +156,20 @@ jobs:
         working-directory: vendor/${{ inputs.module-repo }}
         env:
           MODULE_BRANCH: ${{ inputs.module-branch }}
-        run: git checkout --track origin/${MODULE_BRANCH}
+        run: git checkout --track origin/"${MODULE_BRANCH}"
 
       - name: Get Secondary Module Source
         if: ${{ inputs.secondary-module-repo != '' }}
         env:
           SECONDARY_MODULE_REPO: ${{ inputs.secondary-module-repo }}
-        run: composer reinstall ${SECONDARY_MODULE_REPO} --prefer-source
+        run: composer reinstall "${SECONDARY_MODULE_REPO}" --prefer-source
 
       - name: Checkout Secondary Module Branch
         if: ${{ (inputs.secondary-module-branch != '') && (inputs.secondary-module-repo != '') }}
         working-directory: vendor/${{ inputs.secondary-module-repo }}
         env:
           SECONDARY_MODULE_BRANCH: ${{ inputs.secondary-module-branch }}
-        run: git checkout --track origin/${SECONDARY_MODULE_BRANCH}
+        run: git checkout --track origin/"${SECONDARY_MODULE_BRANCH}"
 
       - name: Validate composer.json and composer.lock
         working-directory: vendor/${{ inputs.module-repo }}
@@ -196,7 +196,7 @@ jobs:
         id: build
         shell: bash
         run: |
-          if [[ -f vendor/${MODULE_REPO}/package.json ]] && grep -wq '"build":' vendor/${MODULE_REPO}/package.json;
+          if [[ -f vendor/"${MODULE_REPO}"/package.json ]] && grep -wq '"build":' vendor/"${MODULE_REPO}"/package.json;
           then
             echo "Has build command"
             echo "hasBuildCommand=true" >> "$GITHUB_OUTPUT"
@@ -260,7 +260,7 @@ jobs:
       - name: Check for module tests
         id: check-for-module-tests
         run:
-          if [[ $(find ./vendor/${MODULE_REPO}/tests/cypress/integration -depth -name '*.cy.js') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi;
+          if [[ $(find ./vendor/"${MODULE_REPO}"/tests/cypress/integration -depth -name '*.cy.js') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi;
           if [[ $MODULE_TESTS_FOUND -eq 0 ]]; then echo "No module Cypress tests found"; else echo "Module tests found"; fi;
           echo "MODULE_TESTS_FOUND=$MODULE_TESTS_FOUND" >> "$GITHUB_OUTPUT";
 
