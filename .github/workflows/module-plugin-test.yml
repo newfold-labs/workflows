@@ -93,6 +93,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      MODULE_REPO: ${{ inputs.module-repo }}
     steps:
 
       - name: Setup PHP
@@ -146,22 +148,28 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Get Module Source
-        run: composer reinstall ${{ inputs.module-repo }} --prefer-source
+        run: composer reinstall "${MODULE_REPO}" --prefer-source
 
       - name: Checkout Module Branch
         continue-on-error: true
         if: ${{ inputs.module-branch != 'main' }}
         working-directory: vendor/${{ inputs.module-repo }}
-        run: git checkout --track origin/${{ inputs.module-branch }}
+        env:
+          MODULE_BRANCH: ${{ inputs.module-branch }}
+        run: git checkout --track origin/"${MODULE_BRANCH}"
 
       - name: Get Secondary Module Source
         if: ${{ inputs.secondary-module-repo != '' }}
-        run: composer reinstall ${{ inputs.secondary-module-repo }} --prefer-source
+        env:
+          SECONDARY_MODULE_REPO: ${{ inputs.secondary-module-repo }}
+        run: composer reinstall "${SECONDARY_MODULE_REPO}" --prefer-source
 
       - name: Checkout Secondary Module Branch
         if: ${{ (inputs.secondary-module-branch != '') && (inputs.secondary-module-repo != '') }}
         working-directory: vendor/${{ inputs.secondary-module-repo }}
-        run: git checkout --track origin/${{ inputs.secondary-module-branch }}
+        env:
+          SECONDARY_MODULE_BRANCH: ${{ inputs.secondary-module-branch }}
+        run: git checkout --track origin/"${SECONDARY_MODULE_BRANCH}"
 
       - name: Validate composer.json and composer.lock
         working-directory: vendor/${{ inputs.module-repo }}
@@ -175,7 +183,7 @@ jobs:
         id: package
         shell: bash
         run: |
-          if [[ -f vendor/${{ inputs.module-repo }}/package.json ]]
+          if [[ -f vendor/${MODULE_REPO}/package.json ]]
           then
             echo "Has package.json file"
             echo "hasPackageJson=true" >> "$GITHUB_OUTPUT"
@@ -188,7 +196,7 @@ jobs:
         id: build
         shell: bash
         run: |
-          if [[ -f vendor/${{ inputs.module-repo }}/package.json ]] && grep -wq '"build":' vendor/${{ inputs.module-repo }}/package.json;
+          if [[ -f vendor/"${MODULE_REPO}"/package.json ]] && grep -wq '"build":' vendor/"${MODULE_REPO}"/package.json;
           then
             echo "Has build command"
             echo "hasBuildCommand=true" >> "$GITHUB_OUTPUT"
@@ -214,7 +222,9 @@ jobs:
 
       - name: Sync Module build files to Plugin node_modules dir
         if: ${{ (inputs.sync-npm-package) && (inputs.sync-npm-package-name != '') }}
-        run: rsync -r -v -h "vendor/${{ inputs.module-repo }}/build/" "node_modules/@${{ inputs.sync-npm-package-name }}/build"
+        env:
+          SYNC_NPM_PACKAGE_NAME: ${{ inputs.sync-npm-package-name }}
+        run: rsync -r -v -h "vendor/${MODULE_REPO}/build/" "node_modules/@${SYNC_NPM_PACKAGE_NAME}/build"
 
       - name: Build Plugin
         run: npm run build
@@ -250,17 +260,17 @@ jobs:
       - name: Check for module tests
         id: check-for-module-tests
         run:
-          if [[ $(find ./vendor/${{ inputs.module-repo }}/tests/cypress/integration -depth -name '*.cy.js') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi;
+          if [[ $(find ./vendor/"${MODULE_REPO}"/tests/cypress/integration -depth -name '*.cy.js') ]]; then MODULE_TESTS_FOUND=1; else MODULE_TESTS_FOUND=0; fi;
           if [[ $MODULE_TESTS_FOUND -eq 0 ]]; then echo "No module Cypress tests found"; else echo "Module tests found"; fi;
           echo "MODULE_TESTS_FOUND=$MODULE_TESTS_FOUND" >> "$GITHUB_OUTPUT";
 
       - name: Run Module Cypress Tests
         if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND == 1 }}
-        run: npm run test:e2e -- --browser chrome --spec "vendor/(${{ inputs.module-repo }}/tests/cypress/integration/*.cy.js),vendor/(${{ inputs.module-repo }}/tests/cypress/integration/**/*.cy.js)"
+        run: npm run test:e2e -- --browser chrome --spec "vendor/(${MODULE_REPO}/tests/cypress/integration/*.cy.js),vendor/(${MODULE_REPO}/tests/cypress/integration/**/*.cy.js)"
 
       - name: Run Remaining Cypress Tests
         if: ${{ ! inputs.only-module-tests }}
-        run: npm run test:e2e -- --browser chrome --spec "tests/cypress/integration/**/*.cy.js,vendor/!(${{ inputs.module-repo }}/tests/cypress/integration/*.cy.js),vendor/!(${{ inputs.module-repo }}/tests/cypress/integration/**/*.cy.js)"
+        run: npm run test:e2e -- --browser chrome --spec "tests/cypress/integration/**/*.cy.js,vendor/!(${MODULE_REPO}/tests/cypress/integration/*.cy.js),vendor/!(${MODULE_REPO}/tests/cypress/integration/**/*.cy.js)"
 
       - name: Store screenshots of test failures
         if: failure()
