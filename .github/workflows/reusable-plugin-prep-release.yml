@@ -255,25 +255,27 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RELEASE_BRANCH="release/${{ steps.new.outputs.version }}"
+          PR_BODY=$(cat <<EOF
+## Changes in this pull request
+- Bumped version from \`${{ steps.old.outputs.version }}\` to \`${{ steps.new.outputs.version }}\`
+- Updated build files
+- Updated language files
+
+## Merged PRs since last release
+${{ steps.merged-prs.outputs.prs }}
+
+## Notes
+${{ steps.run-post-set-version.outputs.message }}
+${{ steps.run-build.outputs.message }}
+${{ steps.run-i18n.outputs.message }}
+
+_Generated automatically by CI workflow (see prep-release workflow)._
+EOF
+)
+
           PR_DATA=$(gh pr create \
             --title "Automated ${{ inputs.level }} release: ${{ steps.new.outputs.version }}" \
-            --body  "$(cat <<EOF
-            ## Changes in this pull request
-            - Bumped version from \`${{ steps.old.outputs.version }}\` to \`${{ steps.new.outputs.version }}\`
-            - Updated build files
-            - Updated language files
-
-            ## Merged PRs since last release
-            ${{ steps.merged-prs.outputs.prs }}
-
-            ## Notes
-            ${{ steps.run-post-set-version.outputs.message }}
-            ${{ steps.run-build.outputs.message }}
-            ${{ steps.run-i18n.outputs.message }}
-
-            _Generated automatically by CI workflow (see prep-release workflow)._
-            EOF
-            )" \
+            --body "$PR_BODY" \
             --base ${{ inputs.plugin-target-branch }} \
             --head "$RELEASE_BRANCH" \
             --json number,url)
