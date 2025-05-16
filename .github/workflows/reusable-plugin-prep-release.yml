@@ -251,7 +251,7 @@ jobs:
             ${{ steps.merged-prs.outputs.prs }}
 
             ## Notes
-            
+
             ${{ steps.run-post-set-version.outputs.message }}
             ${{ steps.run-build.outputs.message }}
             ${{ steps.run-i18n.outputs.message }}
