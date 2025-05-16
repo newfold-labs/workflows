@@ -155,9 +155,9 @@ jobs:
         run: |
           if npm run | grep -q post-set-version; then
             npm run post-set-version
-            echo "message=Ran npm script: post-set-version" >> "$GITHUB_OUTPUT"
+            echo "message=✅ Ran npm script: post-set-version" >> "$GITHUB_OUTPUT"
           else
-            echo echo "⚠️ Warning: post-set-version script not defined. Skipping step."
+            echo echo "post-set-version script not defined. Skipping step."
             echo "message='⚠️ Warning: post-set-version script not defined.'" >> "$GITHUB_OUTPUT"
           fi
 
@@ -169,9 +169,9 @@ jobs:
         run: |
           if npm run | grep -q build; then
             npm run build
-            echo "message=Ran npm script: build" >> "$GITHUB_OUTPUT"
+            echo "message=✅ Ran npm script: build" >> "$GITHUB_OUTPUT"
           else
-            echo "⚠️ Warning: build script not defined. Skipping step."
+            echo "build script not defined. Skipping step."
             echo "message='⚠️ Warning: build script not defined.'" >> "$GITHUB_OUTPUT"
           fi
 
@@ -180,9 +180,9 @@ jobs:
         run: |
           if composer run-script -l | grep -q i18n; then
             composer run-script i18n
-            echo "message=Ran composer script: i18n" >> "$GITHUB_OUTPUT"
+            echo "message=✅ Ran composer script: i18n" >> "$GITHUB_OUTPUT"
           else
-            echo "⚠️ Warning: i18n script not defined. Skipping step."
+            echo "i18n script not defined. Skipping step."
             echo "message='⚠️ Warning: i18n script not defined.'" >> "$GITHUB_OUTPUT"
           fi
 
@@ -219,7 +219,7 @@ jobs:
             "[.[] | select(.mergedAt > \"$TAG_DATE\") | \"- #\(.number) \(.title)\"] | join(\"\\n\")")
 
           if [ -z "$MERGED_PRS" ]; then
-            echo "No pull requests merged since last release."
+            echo "No pull requests merged since last release. Skipping PR listing."
             echo "prs=No pull requests merged since last release to the ${PLUGIN_SOURCE_BRANCH} branch." >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -251,6 +251,7 @@ jobs:
             ${{ steps.merged-prs.outputs.prs }}
 
             ## Notes
+            
             ${{ steps.run-post-set-version.outputs.message }}
             ${{ steps.run-build.outputs.message }}
             ${{ steps.run-i18n.outputs.message }}
@@ -269,4 +270,10 @@ jobs:
             echo ""
             echo "### Merged PRs since last release"
             echo "${{ steps.merged-prs.outputs.prs }}"
+            echo ""
+            echo "### Notes"
+            echo "${{ steps.run-post-set-version.outputs.message }}"
+            echo "${{ steps.run-build.outputs.message }}"
+            echo "${{ steps.run-i18n.outputs.message }}"
+            echo ""
           } >> "$GITHUB_STEP_SUMMARY"
