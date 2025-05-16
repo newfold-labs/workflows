@@ -230,6 +230,9 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Create release branch from current HEAD
+        run: git checkout -b release/${{ steps.new.outputs.version }}
+
       # create the release branch, commit the changes, and create pull request
       - name: Create Release Pull Request
         id: create_pr
