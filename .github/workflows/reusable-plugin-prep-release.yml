@@ -26,11 +26,6 @@ on:
         description: The level of release to be used.
         type: string
         required: true
-      json-file:
-        description: The JSON file with version.
-        type: string
-        default: 'package.json'
-        required: false
       php-file:
         description: The PHP file with version constant.
         type: string
@@ -45,17 +40,27 @@ jobs:
   # This job is used to prepare a release.
   #
   # It does the following:
-  # - Checks out the plugin repo (develop branch)
-  # - Bumps the version as specified in the input
-  # - Prepares build artifact
-  # - Creates a release branch
-  # - Commits the changes
-  # - Creates a pull request to the main branch
+  # - Check out the plugin repo at the source-branch (typically develop, but could be a hotfix branch)
+  # - Set up PHP and Node.js
+  # - Validate composer
+  # - Install PHP and Node dependencies
+  # - Get the latest version from package.json
+  # - Bump the version in package.json
+  # - Update the version in the PHP file (if specified)
+  # - Run the post-set-version command (if defined)
+  # - Remove old build files
+  # - Run the build command (if defined)
+  # - Run the i18n command (if defined)
+  # - List tags
+  # - Get merged PRs since last tag/release
+  # - Create a release branch
+  # - Commit the changes
+  # - Create a pull request to the target branch (main)
+  # - Write a summary to the workflow summary
   prep-release:
     name: Prepare Release
     runs-on: ubuntu-latest
     permissions:
-      # Give the default token permission to commit, push the changed files, and open a pull request.
       contents: write
       pull-requests: write
     steps:
@@ -73,7 +78,7 @@ jobs:
         with:
           php-version: '8.1'
           coverage: none
-          tools: composer, cs2pr
+          tools: composer
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
@@ -100,12 +105,9 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Get old version
-        if: ${{ inputs.json-file != '' }}
         id: old
-        env:
-          JSON_FILE: ${{ inputs.json-file }}
         run: |
-          RAW_VERSION=$(node -p "require('./${JSON_FILE}').version")
+          RAW_VERSION=$(node -p "require('./package.json').version")
 
           # Validate the version follows expected semantic versioning pattern.
           if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
@@ -116,13 +118,11 @@ jobs:
           echo "version=${RAW_VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Update version in package.json file
-        if: ${{ inputs.json-file != '' }}
         id: new
         env:
-          JSON_FILE: ${{ inputs.json-file }}
           RELEASE_LEVEL: ${{ inputs.level }}
         run: |
-          RAW_VERSION=$(npm version "${RELEASE_LEVEL}" --no-git-tag-version --prefix "$(dirname "${JSON_FILE}")")
+          RAW_VERSION=$(npm version "${RELEASE_LEVEL}" --no-git-tag-version --tag-version-prefix="")
 
           # Validate the version follows expected semantic versioning pattern.
           if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
@@ -151,41 +151,43 @@ jobs:
 
       # plugin can define a custom post-set-version command
       - name: Run post-set-version command
-        if: ${{ inputs.json-file != '' }}
+        id: run-post-set-version
         run: |
           if npm run | grep -q post-set-version; then
             npm run post-set-version
+            echo "message=Ran npm script: post-set-version" >> "$GITHUB_OUTPUT"
           else
             echo echo "⚠️ Warning: post-set-version script not defined. Skipping step."
+            echo "message='⚠️ Warning: post-set-version script not defined.'" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Remove old build files
-        if: ${{ inputs.json-file != '' }}
-        run: |
-          if [ -d "build" ]; then
-            rm -rf build
-          fi
+        run: rm -rf build
 
       - name: Run build command
-        if: ${{ inputs.json-file != '' }}
+        id: run-build
         run: |
           if npm run | grep -q build; then
             npm run build
+            echo "message=Ran npm script: build" >> "$GITHUB_OUTPUT"
           else
             echo "⚠️ Warning: build script not defined. Skipping step."
+            echo "message='⚠️ Warning: build script not defined.'" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run composer i18n command
-        if: ${{ inputs.php-file != '' }}
+        id: run-i18n
         run: |
           if composer run-script | grep -q i18n; then
             composer run-script i18n
+            echo "message=Ran composer script: i18n" >> "$GITHUB_OUTPUT"
           else
             echo "⚠️ Warning: i18n script not defined. Skipping step."
+            echo "message='⚠️ Warning: i18n script not defined.'" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: List tags (debug)
-        run: git tag --list
+      - name: List tags
+        run: git tag --list --sort=-creatordate
 
       - name: Get merged PRs since last tag/release
         id: merged-prs
@@ -217,7 +219,9 @@ jobs:
             "[.[] | select(.mergedAt > \"$TAG_DATE\") | \"- #\(.number) \(.title)\"] | join(\"\\n\")")
 
           if [ -z "$MERGED_PRS" ]; then
-            MERGED_PRS="(No pull requests merged since last release)"
+            echo "No pull requests merged since last release."
+            echo "prs=No pull requests merged since last release to the ${PLUGIN_SOURCE_BRANCH} branch." >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           {
@@ -245,6 +249,11 @@ jobs:
             ## Merged PRs since last release
 
             ${{ steps.merged-prs.outputs.prs }}
+
+            ## Notes
+            ${{ steps.run-post-set-version.outputs.message }}
+            ${{ steps.run-build.outputs.message }}
+            ${{ steps.run-i18n.outputs.message }}
 
             _Generated automatically by CI workflow (see prep-release workflow)._
           commit-message: "🤖 prep for release - ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
