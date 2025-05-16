@@ -83,10 +83,16 @@ on:
         type: string
         required: true
 
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured individually for each job.
+permissions: {}
+
 jobs:
   job:
     name: Build and Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
 
       - name: Setup PHP
@@ -103,6 +109,7 @@ jobs:
         with:
           repository: ${{ inputs.plugin-repo }}
           ref: ${{ inputs.plugin-branch }}
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
