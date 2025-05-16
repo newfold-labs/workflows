@@ -143,7 +143,7 @@ jobs:
             echo "message=✅ Ran npm script: post-set-version" >> "$GITHUB_OUTPUT"
           else
             echo echo "post-set-version script not defined. Skipping step."
-            echo "message='⚠️ Warning: post-set-version script not defined.'" >> "$GITHUB_OUTPUT"
+            echo "message=⚠️ Warning: post-set-version script not defined." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run build command
@@ -155,7 +155,7 @@ jobs:
             echo "message=✅ Ran npm script: build" >> "$GITHUB_OUTPUT"
           else
             echo "build script not defined. Skipping step."
-            echo "message='⚠️ Warning: build script not defined.'" >> "$GITHUB_OUTPUT"
+            echo "message=⚠️ Warning: build script not defined." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run composer i18n command
@@ -166,7 +166,7 @@ jobs:
             echo "message=✅ Ran composer script: i18n" >> "$GITHUB_OUTPUT"
           else
             echo "i18n script not defined. Skipping step."
-            echo "message='⚠️ Warning: i18n script not defined.'" >> "$GITHUB_OUTPUT"
+            echo "message=⚠️ Warning: i18n script not defined." >> "$GITHUB_OUTPUT"
           fi
 
       - name: List tags (debug)
