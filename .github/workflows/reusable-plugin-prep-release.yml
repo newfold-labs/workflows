@@ -270,16 +270,13 @@ jobs:
           \n\
           _Generated automatically by CI workflow (see prep-release workflow)._"
 
-          PR_DATA=$(gh pr create \
+          PR_URL=$(gh pr create \
             --title "Automated ${{ inputs.level }} release: ${{ steps.new.outputs.version }}" \
             --body "$PR_BODY" \
             --base ${{ inputs.plugin-target-branch }} \
-            --head "$RELEASE_BRANCH" \
-            --json number,url)
+            --head "$RELEASE_BRANCH" )
 
-          echo "$PR_DATA"
-          echo "pr_number=$(echo "$PR_DATA" | jq -r .number)" >> "$GITHUB_OUTPUT"
-          echo "pr_url=$(echo "$PR_DATA" | jq -r .url)" >> "$GITHUB_OUTPUT"
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
 
       - name: Write release summary to workflow summary
         run: |
@@ -288,7 +285,7 @@ jobs:
             echo ""
             echo "- **Version bump**: ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
             echo "- **Release branch created**: \`release/${{ steps.new.outputs.version }}\`"
-            echo "- **Pull request created**: [View PR #${{ steps.create_pr.outputs.pr_number }}](${{ steps.create_pr.outputs.pr_url }})"
+            echo "- **Pull request created**: ${{ steps.create_pr.outputs.pr_url }}"
             echo ""
             echo "### Merged PRs since last release"
             echo "${{ steps.merged-prs.outputs.prs }}"
