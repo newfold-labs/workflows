@@ -146,6 +146,7 @@ jobs:
       module-repo: newfold-labs/wp-module-${{ matrix.module }}
       module-branch: 'main'
       node-version: '20'
+      secondary-module-repo: ${{ matrix.secondary-module-repo && format( 'newfold-labs/wp-module-{0}', matrix.secondary-module-repo ) || '' }}
       only-module-tests: ${{ matrix.only-module-tests && true || false }}
       artifact-name: ${{ format( 'wp-plugin-{0}-{1}-{2}', matrix.brand, matrix.module, strategy.job-index ) }}
     secrets: inherit
