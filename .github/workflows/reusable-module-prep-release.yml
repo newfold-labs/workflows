@@ -176,6 +176,7 @@ jobs:
         id: merged-prs
         env:
           GH_TOKEN: ${{ github.token }}
+          MODULE_BRANCH: ${{ inputs.module-branch }}
         run: |
           set -e
 
@@ -201,7 +202,7 @@ jobs:
 
           if [ -z "$MERGED_PRS" ]; then
             echo "No pull requests merged since last release. Skipping PR listing."
-            echo "prs=No pull requests merged since last release to the ${PLUGIN_SOURCE_BRANCH} branch." >> "$GITHUB_OUTPUT"
+            echo "prs=No pull requests merged since last release to the ${MODULE_BRANCH} branch." >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
