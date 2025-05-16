@@ -178,7 +178,7 @@ jobs:
       - name: Run composer i18n command
         id: run-i18n
         run: |
-          if composer run-script | grep -q i18n; then
+          if composer run-script -l | grep -q i18n; then
             composer run-script i18n
             echo "message=Ran composer script: i18n" >> "$GITHUB_OUTPUT"
           else
