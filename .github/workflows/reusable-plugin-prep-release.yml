@@ -230,9 +230,12 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # create the release branch, commit the changes
+      # create the release branch, commit the changes with the github-actions[bot]
       - name: Create and push release branch
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           RELEASE_BRANCH="release/${{ steps.new.outputs.version }}"
           git checkout -b "$RELEASE_BRANCH"
           git add .
