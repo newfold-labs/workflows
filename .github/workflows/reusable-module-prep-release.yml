@@ -114,7 +114,7 @@ jobs:
           JSON_FILE: ${{ inputs.json-file }}
           RELEASE_LEVEL: ${{ inputs.level }}
         run: |
-          RAW_VERSION=$(npm version "${RELEASE_LEVEL}" --no-git-tag-version --prefix "$(dirname "${JSON_FILE}")")
+          RAW_VERSION=$(npm version "${RELEASE_LEVEL}" --no-git-tag-version --tag-version-prefix="" --prefix "$(dirname "${JSON_FILE}")")
 
           # Validate the version follows expected semantic versioning pattern.
           if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
@@ -202,7 +202,9 @@ jobs:
             "[.[] | select(.mergedAt > \"$TAG_DATE\") | \"- #\(.number) \(.title)\"] | join(\"\\n\")")
 
           if [ -z "$MERGED_PRS" ]; then
-            MERGED_PRS="(No pull requests merged since last release)"
+            echo "No pull requests merged since last release. Skipping PR listing."
+            echo "prs=No pull requests merged since last release." >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           {
