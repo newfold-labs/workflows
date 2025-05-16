@@ -157,7 +157,7 @@ jobs:
             npm run post-set-version
             echo "message=✅ Ran npm script: post-set-version" >> "$GITHUB_OUTPUT"
           else
-            echo echo "post-set-version script not defined. Skipping step."
+            echo "post-set-version script not defined. Skipping step."
             echo "message=⚠️ Warning: post-set-version script not defined." >> "$GITHUB_OUTPUT"
           fi
 
@@ -230,37 +230,48 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create release branch from current HEAD
-        run: git checkout -b release/${{ steps.new.outputs.version }}
+      # create the release branch, commit the changes
+      - name: Create and push release branch
+        run: |
+          RELEASE_BRANCH="release/${{ steps.new.outputs.version }}"
+          git checkout -b "$RELEASE_BRANCH"
+          git add .
+          git commit -m "🤖 prep for release - ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
+          git push origin "$RELEASE_BRANCH"
 
-      # create the release branch, commit the changes, and create pull request
-      - name: Create Release Pull Request
+      # Create the PR. (Requires jq present on GitHub-hosted runners)
+      - name: Create Pull Request to target branch
         id: create_pr
-        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
-        with:
-          token: ${{ github.token }}
-          base: ${{ inputs.plugin-target-branch }}
-          branch: release/${{ steps.new.outputs.version }}
-          title: "Automated ${{ inputs.level }} release: ${{ steps.new.outputs.version }}"
-          body: |
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_BRANCH="release/${{ steps.new.outputs.version }}"
+          PR_DATA=$(gh pr create \
+            --title "Automated ${{ inputs.level }} release: ${{ steps.new.outputs.version }}" \
+            --body  "$(cat <<EOF
             ## Changes in this pull request
-
-            - Bumped version from `${{ steps.old.outputs.version }}` to `${{ steps.new.outputs.version }}`
+            - Bumped version from \`${{ steps.old.outputs.version }}\` to \`${{ steps.new.outputs.version }}\`
             - Updated build files
             - Updated language files
 
             ## Merged PRs since last release
-
             ${{ steps.merged-prs.outputs.prs }}
 
             ## Notes
-
             ${{ steps.run-post-set-version.outputs.message }}
             ${{ steps.run-build.outputs.message }}
             ${{ steps.run-i18n.outputs.message }}
 
             _Generated automatically by CI workflow (see prep-release workflow)._
-          commit-message: "🤖 prep for release - ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
+            EOF
+            )" \
+            --base ${{ inputs.plugin-target-branch }} \
+            --head "$RELEASE_BRANCH" \
+            --json number,url)
+
+          echo "$PR_DATA"
+          echo "pr_number=$(echo "$PR_DATA" | jq -r .number)" >> "$GITHUB_OUTPUT"
+          echo "pr_url=$(echo "$PR_DATA" | jq -r .url)" >> "$GITHUB_OUTPUT"
 
       - name: Write release summary to workflow summary
         run: |
@@ -269,7 +280,7 @@ jobs:
             echo ""
             echo "- **Version bump**: ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
             echo "- **Release branch created**: \`release/${{ steps.new.outputs.version }}\`"
-            echo "- **Pull request created**: [View PR #${{ steps.create_pr.outputs.pull-request-number }}](${{ steps.create_pr.outputs.pull-request-url }})"
+            echo "- **Pull request created**: [View PR #${{ steps.create_pr.outputs.pr_number }}](${{ steps.create_pr.outputs.pr_url }})"
             echo ""
             echo "### Merged PRs since last release"
             echo "${{ steps.merged-prs.outputs.prs }}"
