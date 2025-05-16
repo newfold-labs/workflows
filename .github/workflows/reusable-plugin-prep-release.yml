@@ -225,7 +225,7 @@ jobs:
           fi
 
           {
-            echo "prs=<<EOF"
+            echo "prs<<EOF"
             echo "$MERGED_PRS"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
