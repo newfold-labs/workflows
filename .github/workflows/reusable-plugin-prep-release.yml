@@ -69,7 +69,7 @@ jobs:
         with:
           repository: ${{ inputs.plugin-repo }}
           ref: ${{ inputs.plugin-source-branch }}
-          persist-credentials: false
+          persist-credentials: true
           fetch-depth: 0
           fetch-tags: true
 
@@ -250,7 +250,6 @@ jobs:
           git commit -m "🤖 prep for release - ${OLD_VERSION} → ${NEW_VERSION}"
           git push origin "$RELEASE_BRANCH"
 
-      # Create the PR. (Requires jq present on GitHub-hosted runners)
       - name: Create Pull Request to target branch
         id: create_pr
         env:
