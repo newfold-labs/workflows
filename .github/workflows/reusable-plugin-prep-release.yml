@@ -235,6 +235,8 @@ jobs:
         id: push-changes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OLD_VERSION: ${ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -242,10 +244,10 @@ jobs:
           # Use GitHub token to authenticate the push
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
 
-          RELEASE_BRANCH="release/${{ steps.new.outputs.version }}"
+          RELEASE_BRANCH="release/${NEW_VERSION}"
           git checkout -b "$RELEASE_BRANCH"
           git add .
-          git commit -m "🤖 prep for release - ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
+          git commit -m "🤖 prep for release - ${OLD_VERSION} → ${NEW_VERSION}"
           git push origin "$RELEASE_BRANCH"
 
       # Create the PR. (Requires jq present on GitHub-hosted runners)
@@ -253,44 +255,60 @@ jobs:
         id: create_pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+          POST_SET_VERSION_MESSAGE: ${{ steps.run-post-set-version.outputs.message }}
+          BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
+          I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
+          MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
+          RELEASE_LEVEL: ${{ inputs.level }}
+          PLUGIN_TARGET_BRANCH: ${{ inputs.plugin-target-branch }}
         run: |
           RELEASE_BRANCH="release/${{ steps.new.outputs.version }}"
           PR_BODY="$({
             echo "## Changes in this pull request"
-            echo "- Bumped version from \`${{ steps.old.outputs.version }}\` to \`${{ steps.new.outputs.version }}\`"
-            echo "- ${{ steps.run-post-set-version.outputs.message }}"
-            echo "- ${{ steps.run-build.outputs.message }}"
-            echo "- ${{ steps.run-i18n.outputs.message }}"
+            echo "- Bumped version from \`${OLD_VERSION}\` to \`${NEW_VERSION}\`"
+            echo "- ${POST_SET_VERSION_MESSAGE}"
+            echo "- ${BUILD_OUTPUT_MESSAGE}"
+            echo "- ${I18N_OUTPUT_MESSAGE}"
             echo ""
             echo "## Merged PRs since last release"
-            echo "${{ steps.merged-prs.outputs.prs }}"
+            echo "${MERGED_PRS}"
             echo ""
             echo "_Generated automatically by CI workflow (see prep-release workflow)._"
           })"
 
           PR_URL=$(gh pr create \
-            --title "Automated ${{ inputs.level }} release: ${{ steps.new.outputs.version }}" \
+            --title "Automated ${RELEASE_LEVEL} release: ${NEW_VERSION}" \
             --body "$PR_BODY" \
-            --base ${{ inputs.plugin-target-branch }} \
+            --base ${PLUGIN_TARGET_BRANCH} \
             --head "$RELEASE_BRANCH" )
 
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
 
       - name: Write release summary to workflow summary
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+          POST_SET_VERSION_MESSAGE: ${{ steps.run-post-set-version.outputs.message }}
+          BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
+          I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
+          MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
+          PR_URL: ${{ steps.create_pr.outputs.pr_url }}
         run: |
           {
             echo "## 🚀 Release Prep Summary"
             echo ""
-            echo "- **Version bump**: ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
-            echo "- **Release branch created**: \`release/${{ steps.new.outputs.version }}\`"
-            echo "- **Pull request created**: ${{ steps.create_pr.outputs.pr_url }}"
+            echo "- **Version bump**: ${OLD_VERSION} → ${NEW_VERSION}"
+            echo "- **Release branch created**: \`release/${NEW_VERSION}\`"
+            echo "- **Pull request created**: ${PR_URL}"
             echo ""
             echo "### Merged PRs since last release"
-            echo "${{ steps.merged-prs.outputs.prs }}"
+            echo "${MERGED_PRS}"
             echo ""
             echo "### Notes"
-            echo "${{ steps.run-post-set-version.outputs.message }}"
-            echo "${{ steps.run-build.outputs.message }}"
-            echo "${{ steps.run-i18n.outputs.message }}"
+            echo "${POST_SET_VERSION_MESSAGE}"
+            echo "${BUILD_OUTPUT_MESSAGE}"
+            echo "${I18N_OUTPUT_MESSAGE}"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
