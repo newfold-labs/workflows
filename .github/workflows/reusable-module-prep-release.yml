@@ -94,8 +94,10 @@ jobs:
       - name: Get old version
         if: ${{ inputs.json-file != '' }}
         id: old
+        env:
+          JSON_FILE: ${{ inputs.json-file }}
         run: |
-          RAW_VERSION=$(node -p "require('./${{ inputs.json-file }}').version")
+          RAW_VERSION=$(node -p "require('./${JSON_FILE}').version")
 
           # Validate the version follows expected semantic versioning pattern.
           if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
@@ -124,13 +126,20 @@ jobs:
 
       - name: Update version in PHP file
         if: ${{ inputs.php-file != '' }}
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+          PHP_FILE: ${{ inputs.php-file }}
         run: |
-          sed -i "s/${{ steps.old.outputs.version }}/${{ steps.new.outputs.version }}/g" ${{ inputs.php-file }}
+          sed -i "s/${OLD_VERSION}/${NEW_VERSION}/g" "${PHP_FILE}"
 
       - name: Output summary
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
         run: |
-          echo "Old version: ${{ steps.old.outputs.version }}"
-          echo "New version: ${{ steps.new.outputs.version }}"
+          echo "Old version: ${OLD_VERSION}"
+          echo "New version: ${NEW_VERSION}"
 
       # Module can define a custom post-set-version command
       - name: Run post-set-version command
@@ -167,6 +176,8 @@ jobs:
         id: merged-prs
         env:
           GH_TOKEN: ${{ github.token }}
+          MODULE_REPO: ${{ inputs.module-repo }}
+          MODULE_BRANCH: ${{ inputs.module-branch }}
         run: |
           set -e
 
@@ -182,12 +193,12 @@ jobs:
           # Get the commit date of the tag
           TAG_DATE=$(git log -1 --format=%cI "$LATEST_TAG")
 
-          echo "Repo: ${{ inputs.module-repo }}"
+          echo "Repo: ${MODULE_REPO}"
           echo "Latest tag: $LATEST_TAG"
           echo "Tag date: $TAG_DATE"
 
           # Fetch merged PRs to the branch since the last tag
-          MERGED_PRS=$(gh pr list --repo "${{ inputs.module-repo }}" --state merged --search "base:${{ inputs.module-branch }}" --json title,number,mergedAt --jq \
+          MERGED_PRS=$(gh pr list --repo "${MODULE_REPO}" --state merged --search "base:${MODULE_BRANCH}" --json title,number,mergedAt --jq \
             "[.[] | select(.mergedAt > \"$TAG_DATE\") | \"- #\(.number) \(.title)\"] | join(\"\\n\")")
 
           if [ -z "$MERGED_PRS" ]; then
