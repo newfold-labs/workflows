@@ -252,20 +252,29 @@ jobs:
           commit-message: "🤖 prep for release - ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
 
       - name: Write release summary to workflow summary
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+          POST_SET_VERSION_MESSAGE: ${{ steps.run-post-set-version.outputs.message }}
+          BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
+          I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
+          MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
+          PR_NUMBER: ${{ steps.create_pr.outputs.pull-request-number }}
+          PR_URL: ${{ steps.create_pr.outputs.pull-request-url }}
         run: |
           {
             echo "## 🚀 Release Prep Summary"
             echo ""
-            echo "- **Version bump**: ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
-            echo "- **Release branch created**: \`release/${{ steps.new.outputs.version }}\`"
-            echo "- **Pull request created**: [View PR #${{ steps.create_pr.outputs.pull-request-number }}](${{ steps.create_pr.outputs.pull-request-url }})"
+            echo "- **Version bump**: ${OLD_VERSION} → ${NEW_VERSION}"
+            echo "- **Release branch created**: \`release/${NEW_VERSION}\`"
+            echo "- **Pull request created**: [View PR #${PR_NUMBER}](${PR_URL})"
             echo ""
             echo "### Merged PRs since last release"
-            echo "${{ steps.merged-prs.outputs.prs }}"
+            echo "${MERGED_PRS}"
             echo ""
             echo "### Notes"
-            echo "${{ steps.run-post-set-version.outputs.message }}"
-            echo "${{ steps.run-build.outputs.message }}"
-            echo "${{ steps.run-i18n.outputs.message }}"
+            echo "${POST_SET_VERSION_MESSAGE}"
+            echo "${BUILD_OUTPUT_MESSAGE}"
+            echo "${I18N_OUTPUT_MESSAGE}"
             echo ""
           }  >> "$GITHUB_STEP_SUMMARY"

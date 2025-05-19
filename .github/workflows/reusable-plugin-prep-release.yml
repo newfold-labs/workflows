@@ -264,7 +264,7 @@ jobs:
           RELEASE_LEVEL: ${{ inputs.level }}
           PLUGIN_TARGET_BRANCH: ${{ inputs.plugin-target-branch }}
         run: |
-          RELEASE_BRANCH="release/${{ steps.new.outputs.version }}"
+          RELEASE_BRANCH="release/${NEW_VERSION}"
           PR_BODY="$({
             echo "## Changes in this pull request"
             echo "- Bumped version from \`${OLD_VERSION}\` to \`${NEW_VERSION}\`"
