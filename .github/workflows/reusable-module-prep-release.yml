@@ -1,5 +1,7 @@
 ##
 # This reusable workflow is used in modules to prep a release.
+#
+# Example usage: https://github.com/newfold-labs/wp-module-marketplace/blob/main/.github/workflows/newfold-prep-release.yml
 ##
 name: Reusable Module Prepare Release
 
@@ -7,25 +9,25 @@ on:
   workflow_call:
     inputs:
       module-repo:
-        description: The module repo.
+        description: The module repo (newfold-labs/wp-module-name).
         type: string
         required: true
       module-branch:
-        description: The branch of the module to use.
+        description: The branch (or commit) of the module to use. This is used to 
         type: string
         default: 'main'
         required: false
       level:
-        description: The level of release to be used.
+        description: The level of release to be used (patch, minor, major).
         type: string
         required: true
       json-file:
-        description: The JSON file with version.
+        description: The JSON file containing the version number to update (package.json).
         type: string
         default: 'package.json'
         required: false
       php-file:
-        description: The PHP file with version constant.
+        description: The PHP file containing the version constant to update (bootstrap.php).
         type: string
         default: 'bootstrap.php'
         required: false
@@ -73,7 +75,7 @@ jobs:
           node-version: 20.x
           cache: 'npm'
 
-      - name: Show versions
+      - name: Show evn tooling versions
         run: |
           php --version
           composer --version
@@ -152,7 +154,7 @@ jobs:
             echo "message=✅ Ran npm script: post-set-version" >> "$GITHUB_OUTPUT"
           else
             echo echo "post-set-version script not defined. Skipping step."
-            echo "message=⚠️ Warning: post-set-version script not defined." >> "$GITHUB_OUTPUT"
+            echo "message=ℹ️ Notice: post-set-version script not defined." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run build command
@@ -164,7 +166,7 @@ jobs:
             echo "message=✅ Ran npm script: build" >> "$GITHUB_OUTPUT"
           else
             echo "build script not defined. Skipping step."
-            echo "message=⚠️ Warning: build script not defined." >> "$GITHUB_OUTPUT"
+            echo "message=ℹ️ Notice: build script not defined." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run composer i18n command
@@ -175,11 +177,8 @@ jobs:
             echo "message=✅ Ran composer script: i18n" >> "$GITHUB_OUTPUT"
           else
             echo "i18n script not defined. Skipping step."
-            echo "message=⚠️ Warning: i18n script not defined." >> "$GITHUB_OUTPUT"
+            echo "message=ℹ️ Notice: i18n script not defined." >> "$GITHUB_OUTPUT"
           fi
-
-      - name: List tags (debug)
-        run: git tag --list --sort=-creatordate
 
       - name: Get merged PRs since last tag/release
         id: merged-prs
