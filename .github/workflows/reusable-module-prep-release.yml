@@ -13,7 +13,7 @@ on:
         type: string
         required: true
       module-branch:
-        description: The branch (or commit) of the module to use. This is used to 
+        description: The branch (or commit) of the module to use. This is used as a starting point for the version changes and the target branch for the pull request.
         type: string
         default: 'main'
         required: false
