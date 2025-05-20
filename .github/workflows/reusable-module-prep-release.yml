@@ -1,5 +1,7 @@
 ##
-# This reusable workflow is used in modules to perp a release.
+# This reusable workflow is used in modules to prep a release.
+#
+# Example usage: https://github.com/newfold-labs/wp-module-marketplace/blob/main/.github/workflows/newfold-prep-release.yml
 ##
 name: Reusable Module Prepare Release
 
@@ -7,25 +9,25 @@ on:
   workflow_call:
     inputs:
       module-repo:
-        description: The module repo.
+        description: The module repo (newfold-labs/wp-module-name).
         type: string
         required: true
       module-branch:
-        description: The branch of the module to use.
+        description: The branch (or commit) of the module to use. This is used as a starting point for the version changes and the target branch for the pull request.
         type: string
         default: 'main'
         required: false
       level:
-        description: The level of release to be used.
+        description: The level of release to be used (patch, minor, major).
         type: string
         required: true
       json-file:
-        description: The JSON file with version.
+        description: The JSON file containing the version number to update (package.json).
         type: string
         default: 'package.json'
         required: false
       php-file:
-        description: The PHP file with version constant.
+        description: The PHP file containing the version constant to update (bootstrap.php).
         type: string
         default: 'bootstrap.php'
         required: false
@@ -73,7 +75,7 @@ jobs:
           node-version: 20.x
           cache: 'npm'
 
-      - name: Show versions
+      - name: Show evn tooling versions
         run: |
           php --version
           composer --version
@@ -86,7 +88,7 @@ jobs:
       - name: Install PHP Dependencies
         uses: ramsey/composer-install@a2636af0004d1c0499ffca16ac0b4cc94df70565 # v3.1.0
         with:
-          composer-options: "--no-dev --optimize-autoloader --verbose"
+          composer-options: "--optimize-autoloader --verbose"
 
       - name: Install JS Dependencies
         run: npm ci --legacy-peer-deps
@@ -141,36 +143,42 @@ jobs:
           echo "Old version: ${OLD_VERSION}"
           echo "New version: ${NEW_VERSION}"
 
-      # Module can define a custom post-set-version command
+      # Module can define a custom post-set-version command for things like removing outdated build files.
+      # Once builds across modules are standardized, this can be removed.
       - name: Run post-set-version command
+        id: run-post-set-version
         if: ${{ inputs.json-file != '' }}
         run: |
           if npm run | grep -q post-set-version; then
             npm run post-set-version
+            echo "message=✅ Ran npm script: post-set-version" >> "$GITHUB_OUTPUT"
           else
-            echo echo "⚠️ Warning: post-set-version script not defined. Skipping step."
+            echo echo "post-set-version script not defined. Skipping step."
+            echo "message=ℹ️ Notice: post-set-version script not defined." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run build command
+        id: run-build
         if: ${{ inputs.json-file != '' }}
         run: |
           if npm run | grep -q build; then
             npm run build
+            echo "message=✅ Ran npm script: build" >> "$GITHUB_OUTPUT"
           else
-            echo "⚠️ Warning: build script not defined. Skipping step."
+            echo "build script not defined. Skipping step."
+            echo "message=ℹ️ Notice: build script not defined." >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run composer i18n command
-        if: ${{ inputs.php-file != '' }}
+        id: run-i18n
         run: |
-          if composer run-script | grep -q i18n; then
+          if composer run-script -l | grep -q i18n; then
             composer run-script i18n
+            echo "message=✅ Ran composer script: i18n" >> "$GITHUB_OUTPUT"
           else
-            echo "⚠️ Warning: i18n script not defined. Skipping step."
+            echo "i18n script not defined. Skipping step."
+            echo "message=ℹ️ Notice: i18n script not defined." >> "$GITHUB_OUTPUT"
           fi
-
-      - name: List tags (debug)
-        run: git tag --list
 
       - name: Get merged PRs since last tag/release
         id: merged-prs
@@ -203,12 +211,12 @@ jobs:
 
           if [ -z "$MERGED_PRS" ]; then
             echo "No pull requests merged since last release. Skipping PR listing."
-            echo "prs=No pull requests merged since last release." >> "$GITHUB_OUTPUT"
+            echo "prs=No pull requests merged since last release to the ${MODULE_BRANCH} branch." >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           {
-            echo "prs=<<EOF"
+            echo "prs<<EOF"
             echo "$MERGED_PRS"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
@@ -233,18 +241,39 @@ jobs:
 
             ${{ steps.merged-prs.outputs.prs }}
 
+            ## Notes
+
+            ${{ steps.run-post-set-version.outputs.message }}
+            ${{ steps.run-build.outputs.message }}
+            ${{ steps.run-i18n.outputs.message }}
+
             _Generated automatically by CI workflow (see prep-release workflow)._
           commit-message: "🤖 prep for release - ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
 
       - name: Write release summary to workflow summary
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+          POST_SET_VERSION_MESSAGE: ${{ steps.run-post-set-version.outputs.message }}
+          BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
+          I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
+          MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
+          PR_NUMBER: ${{ steps.create_pr.outputs.pull-request-number }}
+          PR_URL: ${{ steps.create_pr.outputs.pull-request-url }}
         run: |
           {
             echo "## 🚀 Release Prep Summary"
             echo ""
-            echo "- **Version bump**: ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
-            echo "- **Release branch created**: \`release/${{ steps.new.outputs.version }}\`"
-            echo "- **Pull request created**: [View PR #${{ steps.create_pr.outputs.pull-request-number }}](${{ steps.create_pr.outputs.pull-request-url }})"
+            echo "- **Version bump**: ${OLD_VERSION} → ${NEW_VERSION}"
+            echo "- **Release branch created**: \`release/${NEW_VERSION}\`"
+            echo "- **Pull request created**: [View PR #${PR_NUMBER}](${PR_URL})"
             echo ""
             echo "### Merged PRs since last release"
-            echo "${{ steps.merged-prs.outputs.prs }}"
+            echo "${MERGED_PRS}"
+            echo ""
+            echo "### Notes"
+            echo "${POST_SET_VERSION_MESSAGE}"
+            echo "${BUILD_OUTPUT_MESSAGE}"
+            echo "${I18N_OUTPUT_MESSAGE}"
+            echo ""
           }  >> "$GITHUB_STEP_SUMMARY"
