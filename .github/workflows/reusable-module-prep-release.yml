@@ -1,5 +1,5 @@
 ##
-# This reusable workflow is used in modules to perp a release.
+# This reusable workflow is used in modules to prep a release.
 ##
 name: Reusable Module Prepare Release
 
