@@ -75,7 +75,7 @@ jobs:
           node-version: 20.x
           cache: 'npm'
 
-      - name: Show evn tooling versions
+      - name: Show environment tooling versions
         run: |
           php --version
           composer --version
@@ -223,6 +223,13 @@ jobs:
 
       # create the release branch, commit the changes, and create pull request
       - name: Create Release Pull Request
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+          POST_SET_VERSION_MESSAGE: ${{ steps.run-post-set-version.outputs.message }}
+          BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
+          I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
+          MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
         id: create_pr
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
         with:
@@ -233,19 +240,14 @@ jobs:
           body: |
             ## Changes in this pull request
 
-            - Bumped version from `${{ steps.old.outputs.version }}` to `${{ steps.new.outputs.version }}`
-            - Updated build files
-            - Updated language files
+            - Bumped version from `${OLD_VERSION}` to `${NEW_VERSION}`
+            - ${POST_SET_VERSION_MESSAGE}
+            - ${BUILD_OUTPUT_MESSAGE}
+            - ${I18N_OUTPUT_MESSAGE}
 
             ## Merged PRs since last release
 
-            ${{ steps.merged-prs.outputs.prs }}
-
-            ## Notes
-
-            ${{ steps.run-post-set-version.outputs.message }}
-            ${{ steps.run-build.outputs.message }}
-            ${{ steps.run-i18n.outputs.message }}
+            ${MERGED_PRS}
 
             _Generated automatically by CI workflow (see prep-release workflow)._
           commit-message: "🤖 prep for release - ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
