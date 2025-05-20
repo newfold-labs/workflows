@@ -277,7 +277,7 @@ jobs:
           PR_URL=$(gh pr create \
             --title "Automated ${RELEASE_LEVEL} release: ${NEW_VERSION}" \
             --body "$PR_BODY" \
-            --base ${PLUGIN_TARGET_BRANCH} \
+            --base "${PLUGIN_TARGET_BRANCH}" \
             --head "$RELEASE_BRANCH" )
 
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
