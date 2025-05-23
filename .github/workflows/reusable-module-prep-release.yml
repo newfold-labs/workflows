@@ -1,0 +1,281 @@
+##
+# This reusable workflow is used in modules to prep a release.
+#
+# Example usage: https://github.com/newfold-labs/wp-module-marketplace/blob/main/.github/workflows/newfold-prep-release.yml
+##
+name: Reusable Module Prepare Release
+
+on:
+  workflow_call:
+    inputs:
+      module-repo:
+        description: The module repo (newfold-labs/wp-module-name).
+        type: string
+        required: true
+      module-branch:
+        description: The branch (or commit) of the module to use. This is used as a starting point for the version changes and the target branch for the pull request.
+        type: string
+        default: 'main'
+        required: false
+      level:
+        description: The level of release to be used (patch, minor, major).
+        type: string
+        required: true
+      json-file:
+        description: The JSON file containing the version number to update (package.json).
+        type: string
+        default: 'package.json'
+        required: false
+      php-file:
+        description: The PHP file containing the version constant to update (bootstrap.php).
+        type: string
+        default: 'bootstrap.php'
+        required: false
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured at the job level.
+permissions: {}
+
+jobs:
+  # This job is used to prepare a release.
+  #
+  # It does the following:
+  # - Bumps the version as specified in the input
+  # - Prepares build artifacts
+  # - Creates a release branch
+  # - Commits the changes
+  # - Creates a pull request to the main branch
+  prep-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    permissions:
+      # Give the default token permission to commit, push the changed files, and open a pull request.
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          repository: ${{ inputs.module-repo }}
+          ref: ${{ inputs.module-branch }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: true
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@cf4cade2721270509d5b1c766ab3549210a39a2a  # v2.33.0
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer, cs2pr
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Show environment tooling versions
+        run: |
+          php --version
+          composer --version
+          node --version
+          npm --version
+
+      - name: Validate composer.json and composer.lock
+        run: composer validate
+
+      - name: Install PHP Dependencies
+        uses: ramsey/composer-install@a2636af0004d1c0499ffca16ac0b4cc94df70565 # v3.1.0
+        with:
+          composer-options: "--optimize-autoloader --verbose"
+
+      - name: Install JS Dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Get old version
+        if: ${{ inputs.json-file != '' }}
+        id: old
+        env:
+          JSON_FILE: ${{ inputs.json-file }}
+        run: |
+          RAW_VERSION=$(node -p "require('./${JSON_FILE}').version")
+
+          # Validate the version follows expected semantic versioning pattern.
+          if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format detected: $RAW_VERSION"
+            exit 1
+          fi
+
+          echo "version=$RAW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update version in package.json
+        if: ${{ inputs.json-file != '' }}
+        id: new
+        env:
+          JSON_FILE: ${{ inputs.json-file }}
+          RELEASE_LEVEL: ${{ inputs.level }}
+        run: |
+          RAW_VERSION=$(npm version "${RELEASE_LEVEL}" --no-git-tag-version --tag-version-prefix="" --prefix "$(dirname "${JSON_FILE}")")
+
+          # Validate the version follows expected semantic versioning pattern.
+          if ! [[ "$RAW_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format detected: $RAW_VERSION"
+            exit 1
+          fi
+
+          echo "version=${RAW_VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Update version in PHP file
+        if: ${{ inputs.php-file != '' }}
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+          PHP_FILE: ${{ inputs.php-file }}
+        run: |
+          sed -i "s/${OLD_VERSION}/${NEW_VERSION}/g" "${PHP_FILE}"
+
+      - name: Output summary
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+        run: |
+          echo "Old version: ${OLD_VERSION}"
+          echo "New version: ${NEW_VERSION}"
+
+      # Module can define a custom post-set-version command for things like removing outdated build files.
+      # Once builds across modules are standardized, this can be removed.
+      - name: Run post-set-version command
+        id: run-post-set-version
+        if: ${{ inputs.json-file != '' }}
+        run: |
+          if npm run | grep -q post-set-version; then
+            npm run post-set-version
+            echo "message=✅ Ran npm script: post-set-version" >> "$GITHUB_OUTPUT"
+          else
+            echo echo "post-set-version script not defined. Skipping step."
+            echo "message=ℹ️ Notice: post-set-version script not defined." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run build command
+        id: run-build
+        if: ${{ inputs.json-file != '' }}
+        run: |
+          if npm run | grep -q build; then
+            npm run build
+            echo "message=✅ Ran npm script: build" >> "$GITHUB_OUTPUT"
+          else
+            echo "build script not defined. Skipping step."
+            echo "message=ℹ️ Notice: build script not defined." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run composer i18n command
+        id: run-i18n
+        run: |
+          if composer run-script -l | grep -q i18n; then
+            composer run-script i18n
+            echo "message=✅ Ran composer script: i18n" >> "$GITHUB_OUTPUT"
+          else
+            echo "i18n script not defined. Skipping step."
+            echo "message=ℹ️ Notice: i18n script not defined." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get merged PRs since last tag/release
+        id: merged-prs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODULE_REPO: ${{ inputs.module-repo }}
+          MODULE_BRANCH: ${{ inputs.module-branch }}
+        run: |
+          set -e
+
+          # Get the latest tag
+          LATEST_TAG=$(git describe --tags "$(git rev-list --tags --max-count=1)" || echo "")
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No previous tag found. Skipping PR listing."
+            echo "prs=No previous releases found." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Get the commit date of the tag
+          TAG_DATE=$(git log -1 --format=%cI "$LATEST_TAG")
+
+          echo "Repo: ${MODULE_REPO}"
+          echo "Latest tag: $LATEST_TAG"
+          echo "Tag date: $TAG_DATE"
+
+          # Fetch merged PRs to the branch since the last tag
+          MERGED_PRS=$(gh pr list --repo "${MODULE_REPO}" --state merged --search "base:${MODULE_BRANCH}" --json title,number,mergedAt --jq \
+            "[.[] | select(.mergedAt > \"$TAG_DATE\") | \"- #\(.number) \(.title)\"] | join(\"\\n\")")
+
+          if [ -z "$MERGED_PRS" ]; then
+            echo "No pull requests merged since last release. Skipping PR listing."
+            echo "prs=No pull requests merged since last release to the ${MODULE_BRANCH} branch." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "prs<<EOF"
+            echo "$MERGED_PRS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # create the release branch, commit the changes, and create pull request
+      - name: Create Release Pull Request
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+          POST_SET_VERSION_MESSAGE: ${{ steps.run-post-set-version.outputs.message }}
+          BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
+          I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
+          MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
+        id: create_pr
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
+        with:
+          token: ${{ github.token }}
+          base: ${{ inputs.module-branch }}
+          branch: release/${{ steps.new.outputs.version }}
+          title: "Automated ${{ inputs.level }} release: ${{ steps.new.outputs.version }}"
+          body: |
+            ## Changes in this pull request
+
+            - Bumped version from `${OLD_VERSION}` to `${NEW_VERSION}`
+            - ${POST_SET_VERSION_MESSAGE}
+            - ${BUILD_OUTPUT_MESSAGE}
+            - ${I18N_OUTPUT_MESSAGE}
+
+            ## Merged PRs since last release
+
+            ${MERGED_PRS}
+
+            _Generated automatically by CI workflow (see prep-release workflow)._
+          commit-message: "🤖 prep for release - ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
+
+      - name: Write release summary to workflow summary
+        env:
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+          POST_SET_VERSION_MESSAGE: ${{ steps.run-post-set-version.outputs.message }}
+          BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
+          I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
+          MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
+          PR_NUMBER: ${{ steps.create_pr.outputs.pull-request-number }}
+          PR_URL: ${{ steps.create_pr.outputs.pull-request-url }}
+        run: |
+          {
+            echo "## 🚀 Release Prep Summary"
+            echo ""
+            echo "- **Version bump**: ${OLD_VERSION} → ${NEW_VERSION}"
+            echo "- **Release branch created**: \`release/${NEW_VERSION}\`"
+            echo "- **Pull request created**: [View PR #${PR_NUMBER}](${PR_URL})"
+            echo ""
+            echo "### Merged PRs since last release"
+            echo "${MERGED_PRS}"
+            echo ""
+            echo "### Notes"
+            echo "${POST_SET_VERSION_MESSAGE}"
+            echo "${BUILD_OUTPUT_MESSAGE}"
+            echo "${I18N_OUTPUT_MESSAGE}"
+            echo ""
+          }  >> "$GITHUB_STEP_SUMMARY"

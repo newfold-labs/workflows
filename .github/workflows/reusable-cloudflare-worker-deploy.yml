@@ -1,0 +1,50 @@
+name: Reusable Cloudflare Worker Deployment Workflow
+on:
+  workflow_call:
+    inputs:
+      npm-install:
+        description: 'Whether to run npm install before deploying the Worker.'
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID:
+        description: 'Cloudflare Account ID where the Worker will be deployed.'
+        required: true
+      CLOUDFLARE_API_TOKEN:
+        description: 'Cloudflare API token with permissions needed to deploy Workers.'
+        required: true
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured individually for each job.
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy Cloudflare Worker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      # When present, an `.nvmrc` file will be used to determine the desired version of Node.js.
+      # The `package.json` file is used as a fallback otherwise.
+      - name: Set up Node.js
+        if: ${{ inputs.npm-install }}
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: ${{ hashFiles( '.nvmrc' ) != '' && '.nvmrc' || 'package.json' }}
+
+      - name: Install npm dependencies
+        if: ${{ inputs.npm-install }}
+        run: npm ci
+
+      - name: Build & deploy Worker
+        uses: cloudflare/wrangler-action@da0e0dfe58b7a431659754fdf3f186c529afbe65 # v3.14.1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

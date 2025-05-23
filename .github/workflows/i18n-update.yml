@@ -12,19 +12,23 @@ on:
       NEWFOLD_ACCESS_TOKEN:
         required: true
 
-permissions:
-  contents: write
-  pull-requests: write
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured individually for each job.
+permissions: {}
 
 jobs:
   update-i18n:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Set Up PHP
         uses: shivammathur/setup-php@9e72090525849c5e82e596468b86eb55e9cc5401 # v2.32.0
@@ -53,34 +57,37 @@ jobs:
           git add languages/
           if git diff --cached --quiet; then
             echo "No changes detected. Skipping commit."
-            echo "changed=false" >> $GITHUB_ENV
+            echo "changed=false" >> "$GITHUB_ENV"
           else
             echo "Changes detected."
-            echo "changed=true" >> $GITHUB_ENV
+            echo "changed=true" >> "$GITHUB_ENV"
           fi
 
       - name: Create Branch and Commit Changes
         if: env.changed == 'true'
         run: |
           BRANCH_NAME="update-i18n-$(date +%Y%m%d%H%M%S)"
-          git checkout -b $BRANCH_NAME
+          git checkout -b "$BRANCH_NAME"
           git commit -m "Update i18n translation files"
-          git push origin $BRANCH_NAME
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_ENV
+          git push origin "$BRANCH_NAME"
+          echo "branch_name=$BRANCH_NAME" >> "$GITHUB_ENV"
 
       - name: Create Pull Request
         if: env.changed == 'true'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          BASE_BRANCH: ${{ inputs.base_branch }}
         with:
           github-token: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const branch = process.env.branch_name;
+            const base = process.env.BASE_BRANCH;
             github.rest.pulls.create({
               owner,
               repo,
               title: "Update i18n translation files",
               head: branch,
-              base: "${{ inputs.base_branch }}",
+              base: base,
               body: "This PR updates the i18n translation files.",
             });
