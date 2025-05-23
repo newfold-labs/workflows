@@ -24,10 +24,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
@@ -37,7 +37,7 @@ jobs:
 
       - name: Set branch name
         id: vars
-        run: echo "BRANCH=auto/translated-$(date +%s)" >> $GITHUB_OUTPUT
+        run: echo "BRANCH=auto/translated-$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Set text domain
         id: config
@@ -46,7 +46,7 @@ jobs:
           if [ -z "$TEXT_DOMAIN" ]; then
             TEXT_DOMAIN="${GITHUB_REPOSITORY##*/}"
           fi
-          echo "TEXT_DOMAIN=$TEXT_DOMAIN" >> $GITHUB_OUTPUT
+          echo "TEXT_DOMAIN=$TEXT_DOMAIN" >> "$GITHUB_OUTPUT"
 
       - name: Translate PO and JSON files
         env:
@@ -167,7 +167,7 @@ jobs:
           EOF
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
           commit-message: Auto-translated PO and JSON files
