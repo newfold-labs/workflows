@@ -82,7 +82,8 @@ CONTEXT_SEPARATORS = ["|", "\u0004"]
 def split_context_key(key):
     for sep in CONTEXT_SEPARATORS:
         if sep in key:
-            return key.split(sep, 1)[0], key.split(sep, 1)[1], sep
+            context, msgid = key.split(sep, 1)
+            return context, msgid, sep
     return None, key, None
 
 for path in Path('languages').rglob('*.json'):
