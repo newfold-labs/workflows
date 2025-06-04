@@ -29,38 +29,52 @@ def batch_translate(texts, to_lang):
         print(f"API request failed for lang {to_lang}:", str(e))
         return None
 
+def compose_msg_with_context(msgid, context):
+    return f"{msgid} ({context})" if context else msgid
+
+def strip_context_from_translation(text):
+    return re.sub(r'\s*\([^()]*\)$', '', text).strip()
+
+def translate_entries(entries, get_id_context, apply_translation, lang):
+    texts = []
+    metadata = []
+
+    for entry in entries:
+        msgid, context = get_id_context(entry)
+        if msgid.strip():
+            texts.append(compose_msg_with_context(msgid, context))
+            metadata.append((entry, bool(context)))
+
+    if not texts:
+        return
+
+    translated_texts = batch_translate(texts, lang)
+    if not translated_texts:
+        return
+
+    for (entry, had_context), translated in zip(metadata, translated_texts):
+        translated = strip_context_from_translation(translated) if had_context else translated.strip()
+        apply_translation(entry, translated)
+
 # Translate .po files
 for path in Path('languages').rglob('*.po'):
     lang = extract_lang_from_filename(path.name)
-    print(f"Language detected {lang}")
+    print(f"Language detected: {lang}")
     if not lang:
         continue
 
-    print(f"Processing the file: {str(path)}")
+    print(f"Processing file: {path}")
     po = polib.pofile(str(path))
-    entries_to_translate = [
-        entry for entry in po
-        if not entry.msgstr.strip() and entry.msgid.strip()
-    ]
+    entries_to_translate = [entry for entry in po if not entry.msgstr.strip() and entry.msgid.strip()]
 
-    texts = []
-    entry_map = []
-    for entry in entries_to_translate:
-        if entry.msgctxt:
-            composed = f"{entry.msgid} ({entry.msgctxt})"
-            entry_map.append((entry, True))
-        else:
-            composed = entry.msgid
-            entry_map.append((entry, False))
-        texts.append(composed)
+    def get_po_id_context(entry):
+        return entry.msgid, entry.msgctxt
 
-    if texts:
-        translated_texts = batch_translate(texts, lang)
-        for (entry, had_context), translated in zip(entry_map, translated_texts):
-            if had_context:
-                translated = re.sub(r'\s*\([^()]*\)$', '', translated).strip()
-            entry.msgstr = translated.strip()
-        po.save()
+    def apply_po_translation(entry, translated):
+        entry.msgstr = translated
+
+    translate_entries(entries_to_translate, get_po_id_context, apply_po_translation, lang)
+    po.save()
 
 # Translate .json files
 CONTEXT_SEPARATORS = ["|", "\u0004"]
@@ -73,9 +87,11 @@ def split_context_key(key):
 
 for path in Path('languages').rglob('*.json'):
     lang = extract_lang_from_filename(path.name)
+    print(f"Language detected: {lang}")
     if not lang:
         continue
 
+    print(f"Processing file: {path}")
     with open(path, 'r', encoding='utf-8') as f:
         try:
             content = json.load(f)
@@ -92,24 +108,23 @@ for path in Path('languages').rglob('*.json'):
     for key, val in messages.items():
         if key == "" or not isinstance(val, list) or val[0].strip():
             continue
-
         context, msgid, sep = split_context_key(key)
-        if context:
-            composed = f"{msgid} ({context})"
-            key_info_map[key] = (msgid, context, sep)
-        else:
-            composed = msgid
-            key_info_map[key] = (msgid, None, None)
-
+        composed = compose_msg_with_context(msgid, context)
         keys_to_translate.append(composed)
+        key_info_map[key] = (msgid, context, sep)
 
-    if keys_to_translate:
-        translated_texts = batch_translate(keys_to_translate, lang)
-        for key, translated in zip(key_info_map.keys(), translated_texts):
-            _, had_context, _ = key_info_map[key]
-            if had_context:
-                translated = re.sub(r'\s*\(.*\)$', '', translated).strip()
-            messages[key] = [translated.strip()]
+    if not keys_to_translate:
+        continue
 
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(content, f, ensure_ascii=False, indent=2)
+    translated_texts = batch_translate(keys_to_translate, lang)
+    if not translated_texts:
+        continue
+
+    for key, translated in zip(key_info_map.keys(), translated_texts):
+        _, context, _ = key_info_map[key]
+        if context:
+            translated = strip_context_from_translation(translated)
+        messages[key] = [translated.strip()]
+
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(content, f, ensure_ascii=False, indent=2)
