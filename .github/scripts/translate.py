@@ -15,23 +15,28 @@ def extract_lang_from_filename(filename):
     return None
 
 def batch_translate(texts, to_lang):
-    url = f"https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to={to_lang}"
+    url = f"https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=en&to={to_lang}"
     headers = {
         "Ocp-Apim-Subscription-Key": os.environ["TRANSLATOR_API_KEY"],
         "Content-Type": "application/json"
     }
     payload = [{"Text": text} for text in texts]
-    response = requests.post(url, headers=headers, json=payload)
-    response.raise_for_status()
-    return [item["translations"][0]["text"] for item in response.json()]
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        return [item["translations"][0]["text"] for item in response.json()]
+    except requests.exceptions.RequestException as e:
+        print(f"API request failed for lang {to_lang}:", str(e))
+        return None
 
 # Translate .po files
-for path in Path('.').rglob('*.po'):
+for path in Path('languages').rglob('*.po'):
     lang = extract_lang_from_filename(path.name)
     print(f"Language detected {lang}")
     if not lang:
         continue
 
+    print(f"Processing the file: {str(path)}")
     po = polib.pofile(str(path))
     entries_to_translate = [
         entry for entry in po
@@ -66,7 +71,7 @@ def split_context_key(key):
             return key.split(sep, 1)[0], key.split(sep, 1)[1], sep
     return None, key, None
 
-for path in Path('.').rglob('*.json'):
+for path in Path('languages').rglob('*.json'):
     lang = extract_lang_from_filename(path.name)
     if not lang:
         continue
