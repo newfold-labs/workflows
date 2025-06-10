@@ -4,8 +4,8 @@ on:
   workflow_call:
     inputs:
       text_domain:
-        description: 'Optional text domain (Defaults to repository name if text domain is missing)'
-        required: false
+        description: 'Text domain for translation'
+        required: true
         type: string
 
     secrets:
@@ -43,18 +43,6 @@ jobs:
         id: vars
         run: echo "BRANCH=auto/translated-$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      - name: Set text domain
-        id: config
-        env:
-          TEXT_DOMAIN_INPUT: ${{ inputs.text_domain }}
-        run: |
-          if [ -z "$TEXT_DOMAIN_INPUT" ]; then
-            TEXT_DOMAIN="${GITHUB_REPOSITORY##*/}"
-          else
-            TEXT_DOMAIN="$TEXT_DOMAIN_INPUT"
-          fi
-          echo "TEXT_DOMAIN=$TEXT_DOMAIN" >> "$GITHUB_OUTPUT"
-
       - name: Download translate.py from parent repo
         run: |
           mkdir -p .github/scripts
@@ -66,7 +54,7 @@ jobs:
       - name: Translate PO and JSON files
         env:
           TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
-          TEXT_DOMAIN: ${{ steps.config.outputs.TEXT_DOMAIN }}
+          TEXT_DOMAIN: ${{ inputs.text_domain }}
         run: python .github/scripts/translate.py
 
       - name: Remove downloaded translate script
