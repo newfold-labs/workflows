@@ -30,20 +30,39 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: 'Check for existing translations PR and exit if found'
+        id: check_pr
+        env:
+          GH_TOKEN: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
+        run: |
+          prs=$(gh pr list --state open --label 'translations' --json number --jq '.[].number')
+          if [ -n "$prs" ]; then
+            echo 'A PR with "translations" label already exists:'
+            echo "$prs"
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo 'No existing "translations" PR found. Continuing workflow.'
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up Python
+        if: steps.check_pr.outputs.found == 'false'
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.x'
 
       - name: Install Python dependencies
+        if: steps.check_pr.outputs.found == 'false'
         run: |
           pip install requests polib
 
       - name: Set branch name
+        if: steps.check_pr.outputs.found == 'false'
         id: vars
         run: echo "BRANCH=auto/translated-$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Download translate.py from parent repo
+        if: steps.check_pr.outputs.found == 'false'
         run: |
           mkdir -p .github/scripts
           curl -H "Authorization: token ${{ secrets.NEWFOLD_ACCESS_TOKEN }}" \
@@ -52,15 +71,18 @@ jobs:
               https://api.github.com/repos/newfold-labs/workflows/contents/.github/scripts/translate.py?ref=main
 
       - name: Translate PO and JSON files
+        if: steps.check_pr.outputs.found == 'false'
         env:
           TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
           TEXT_DOMAIN: ${{ inputs.text_domain }}
         run: python .github/scripts/translate.py
 
       - name: Remove downloaded translate script
+        if: steps.check_pr.outputs.found == 'false'
         run: rm .github/scripts/translate.py
 
       - name: Create Pull Request
+        if: steps.check_pr.outputs.found == 'false'
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
         with:
           token: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
