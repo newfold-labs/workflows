@@ -30,7 +30,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: 'Check for existing translations PR and exit if found'
+      - name: Check for existing translations PR and exit if found
         id: check_pr
         env:
           GH_TOKEN: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
