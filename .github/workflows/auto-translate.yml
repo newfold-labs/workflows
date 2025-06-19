@@ -89,7 +89,7 @@ jobs:
           token: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
           commit-message: Auto-translated PO and JSON files
           branch: ${{ steps.vars.outputs.BRANCH }}
-          title: Auto-translated files update
+          title: Updating translation files after ${{ github.sha }}
           body: |
             This pull request contains automatic translations of PO and JSON files.
             
