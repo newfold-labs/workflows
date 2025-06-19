@@ -91,5 +91,7 @@ jobs:
           branch: ${{ steps.vars.outputs.BRANCH }}
           title: Auto-translated files update
           body: |
-            This PR contains automatic translations of PO and JSON files.
+            This pull request contains automatic translations of PO and JSON files.
+            
+            The workflow run responsible for creating this pull request can be found [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
           labels: translations
