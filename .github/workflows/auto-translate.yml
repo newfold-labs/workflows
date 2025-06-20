@@ -64,10 +64,9 @@ jobs:
       - name: Set branch name
         if: steps.check_pr.outputs.found == 'false'
         id: vars
-        run: |
-          RAW_BRANCH_NAME="${{ inputs.pr-branch-name }}"
-          SAFE_BRANCH_NAME=$(echo "$RAW_BRANCH_NAME" | tr -cd 'a-zA-Z0-9._-')
-          echo "BRANCH=auto-translate/$SAFE_BRANCH_NAME" >> "$GITHUB_OUTPUT"          
+        env:
+          PR_BRANCH_NAME: ${{ inputs.pr-branch-name }}
+        run: echo "BRANCH=auto-translate/$PR_BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Download translate.py from parent repo
         if: steps.check_pr.outputs.found == 'false'
