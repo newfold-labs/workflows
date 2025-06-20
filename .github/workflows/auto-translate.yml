@@ -7,6 +7,11 @@ on:
         description: 'Text domain for translation'
         required: true
         type: string
+      pr-branch-name:
+        description: 'Base branch name to create translation PR against'
+        required: false
+        default: 'main'
+        type: string
 
     secrets:
       TRANSLATOR_API_KEY:
@@ -59,7 +64,7 @@ jobs:
       - name: Set branch name
         if: steps.check_pr.outputs.found == 'false'
         id: vars
-        run: echo "BRANCH=auto/translated-$(date +%s)" >> "$GITHUB_OUTPUT"
+        run: echo "BRANCH=auto-translate/${{ inputs.pr-branch-name }}" >> "$GITHUB_OUTPUT"
 
       - name: Download translate.py from parent repo
         if: steps.check_pr.outputs.found == 'false'
@@ -82,6 +87,10 @@ jobs:
         if: steps.check_pr.outputs.found == 'false'
         run: rm translation-action-scripts
 
+      - name: Get human-readable datetime
+        id: datetime
+        run: echo "timestamp=$(date -u '+%B %d, %Y at %H:%M UTC')" >> "$GITHUB_OUTPUT"
+
       - name: Create Pull Request
         if: steps.check_pr.outputs.found == 'false'
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
@@ -89,7 +98,7 @@ jobs:
           token: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
           commit-message: Auto-translated PO and JSON files
           branch: ${{ steps.vars.outputs.BRANCH }}
-          title: Updating translation files after ${{ github.sha }}
+          title: Updating translation files on ${{ steps.datetime.outputs.timestamp }}
           body: |
             This pull request contains automatic translations of PO and JSON files.
             
