@@ -44,10 +44,10 @@ jobs:
           if [ -n "$prs" ]; then
             echo 'A PR with "translations" label already exists:'
             echo "$prs"
-            echo "found=true" >> $GITHUB_OUTPUT
+            echo "found=true" >> "$GITHUB_OUTPUT"
           else
             echo 'No existing "translations" PR found. Continuing workflow.'
-            echo "found=false" >> $GITHUB_OUTPUT
+            echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Python
