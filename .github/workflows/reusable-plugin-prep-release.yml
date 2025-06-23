@@ -233,7 +233,7 @@ jobs:
         id: push-changes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OLD_VERSION: ${ steps.old.outputs.version }}
+          OLD_VERSION: ${{ steps.old.outputs.version }}
           NEW_VERSION: ${{ steps.new.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
