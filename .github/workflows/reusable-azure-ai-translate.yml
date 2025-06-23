@@ -84,13 +84,13 @@ jobs:
           TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
           TEXT_DOMAIN: ${{ inputs.text_domain }}
           TEMP_DIR: ${{ runner.temp }}
-        run: python $TEMP_DIR/translation-action-scripts/.github/scripts/translate.py
+        run: python "$TEMP_DIR/translation-action-scripts/.github/scripts/translate.py"
 
       - name: Remove downloaded translate script
         if: steps.check_pr.outputs.found == 'false'
         env:
           TEMP_DIR: ${{ runner.temp }}
-        run: rm -rf $TEMP_DIR/translation-action-scripts
+        run: rm -rf "$TEMP_DIR/translation-action-scripts"
 
       - name: Get human-readable datetime
         id: datetime
