@@ -7,7 +7,7 @@ on:
         description: 'Text domain for translation'
         required: true
         type: string
-      pr-branch-name:
+      pr_branch_name:
         description: 'Base branch name to create translation PR against'
         required: false
         default: 'main'
@@ -65,7 +65,7 @@ jobs:
         if: steps.check_pr.outputs.found == 'false'
         id: vars
         env:
-          PR_BRANCH_NAME: ${{ inputs.pr-branch-name }}
+          PR_BRANCH_NAME: ${{ inputs.pr_branch_name }}
         run: echo "BRANCH=auto-translate/$PR_BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Download translate.py from parent repo
