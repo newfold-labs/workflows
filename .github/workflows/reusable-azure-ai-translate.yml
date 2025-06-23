@@ -93,16 +93,32 @@ jobs:
         id: datetime
         run: echo "timestamp=$(date -u '+%B %d, %Y at %H:%M UTC')" >> "$GITHUB_OUTPUT"
 
-      - name: Create Pull Request
+      - name: Set up Git
         if: steps.check_pr.outputs.found == 'false'
-        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
-        with:
-          token: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
-          commit-message: Auto-translated PO and JSON files
-          branch: ${{ steps.vars.outputs.BRANCH }}
-          title: Updating translation files on ${{ steps.datetime.outputs.timestamp }}
-          body: |
-            This pull request contains automatic translations of PO and JSON files.
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
 
-            The workflow run responsible for creating this pull request can be found [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
-          labels: translations
+      - name: Authenticate GitHub CLI
+        if: steps.check_pr.outputs.found == 'false'
+        run: echo "${{ secrets.NEWFOLD_ACCESS_TOKEN }}" | gh auth login --with-token
+
+      - name: Commit and push translation updates
+        if: steps.check_pr.outputs.found == 'false'
+        run: |
+          git checkout -b ${{ steps.vars.outputs.BRANCH }}
+          git add .
+          git commit -m "Auto-translated PO and JSON files"
+          git push origin ${{ steps.vars.outputs.BRANCH }}
+
+      - name: Create Pull Request using GitHub CLI
+        if: steps.check_pr.outputs.found == 'false'
+        run: |
+          gh pr create \
+            --title "Updating translation files on ${{ steps.datetime.outputs.timestamp }}" \
+            --body "This pull request contains automatic translations of PO and JSON files.
+                    
+                    The workflow run responsible for creating this pull request can be found [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})." \
+            --head ${{ steps.vars.outputs.BRANCH }} \
+            --base ${{ github.event.repository.default_branch }} \
+            --label translations
