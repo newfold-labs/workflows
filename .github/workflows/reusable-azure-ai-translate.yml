@@ -1,4 +1,4 @@
-name: Auto Translate
+name: Reusable Azure AI Translations
 
 on:
   workflow_call:
