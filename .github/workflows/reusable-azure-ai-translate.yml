@@ -87,7 +87,7 @@ jobs:
 
       - name: Remove downloaded translate script
         if: steps.check_pr.outputs.found == 'false'
-        run: rm translation-action-scripts
+        run: rm -rf translation-action-scripts
 
       - name: Get human-readable datetime
         id: datetime
