@@ -68,57 +68,65 @@ jobs:
           PR_BRANCH_NAME: ${{ inputs.pr_branch_name }}
         run: echo "BRANCH=auto-translate/$PR_BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Download translate.py from parent repo
+      - name: Download translate.py to temp directory
         if: steps.check_pr.outputs.found == 'false'
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-        with:
-          repository: 'newfold-labs/workflows'
-          path: 'translation-action-scripts'
-          sparse-checkout: '.github/scripts/translate.py'
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
+        run: |
+          mkdir -p "$RUNNER_TEMP/_temp"
+          git clone --filter=blob:none --sparse https://github.com/newfold-labs/workflows.git "$RUNNER_TEMP/_temp/workflows"
+          cd "$RUNNER_TEMP/_temp/workflows"
+          git sparse-checkout set .github/scripts
+          cp .github/scripts/translate.py "$RUNNER_TEMP/_temp/translate.py"
 
       - name: Translate PO and JSON files
         if: steps.check_pr.outputs.found == 'false'
         env:
           TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
           TEXT_DOMAIN: ${{ inputs.text_domain }}
-        run: python translation-action-scripts/.github/scripts/translate.py
-
-      - name: Remove downloaded translate script
-        if: steps.check_pr.outputs.found == 'false'
-        run: rm -rf translation-action-scripts
+        run: python "$RUNNER_TEMP/_temp/translate.py"
 
       - name: Get human-readable datetime
         id: datetime
         run: echo "timestamp=$(date -u '+%B %d, %Y at %H:%M UTC')" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Git
+      - name: Create Pull Request to update translations
         if: steps.check_pr.outputs.found == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
+          BRANCH_NAME: ${{ steps.vars.outputs.BRANCH }}
+          TIMESTAMP: ${{ steps.datetime.outputs.timestamp }}
         run: |
+          # Configure Git identity
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-      - name: Authenticate GitHub CLI
-        if: steps.check_pr.outputs.found == 'false'
-        run: echo "${{ secrets.NEWFOLD_ACCESS_TOKEN }}" | gh auth login --with-token
+          # Ensure remote uses token for Git push
+          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git
 
-      - name: Commit and push translation updates
-        if: steps.check_pr.outputs.found == 'false'
-        run: |
-          git checkout -b ${{ steps.vars.outputs.BRANCH }}
+          # Create or reset to the branch
+          git checkout -B "$BRANCH_NAME"
+
+          # Stage changes
           git add .
-          git commit -m "Auto-translated PO and JSON files"
-          git push origin ${{ steps.vars.outputs.BRANCH }}
+          if git diff --cached --quiet; then
+            echo "No changes to commit. Skipping PR creation."
+            exit 0
+          fi
 
-      - name: Create Pull Request using GitHub CLI
-        if: steps.check_pr.outputs.found == 'false'
-        run: |
+          # Commit and push (gh auth will handle credentials)
+          git commit -m "Auto-translated PO and JSON files"
+          git push --force origin "$BRANCH_NAME"
+
+          # Build PR body
+          PR_BODY="$({
+            echo "This pull request contains automatic translations of PO and JSON files."
+            echo ""
+            echo "The workflow run responsible for creating this pull request can be found [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})."
+          })"
+
+          # Create PR using GitHub CLI
           gh pr create \
-            --title "Updating translation files on ${{ steps.datetime.outputs.timestamp }}" \
-            --body "This pull request contains automatic translations of PO and JSON files.
-                    
-                    The workflow run responsible for creating this pull request can be found [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})." \
-            --head ${{ steps.vars.outputs.BRANCH }} \
-            --base ${{ github.event.repository.default_branch }} \
-            --label translations
+            --title "Updating translation files on ${TIMESTAMP}" \
+            --body "$PR_BODY" \
+            --base "${{ github.event.repository.default_branch }}" \
+            --head "$BRANCH_NAME" \
+            --label "translations"
