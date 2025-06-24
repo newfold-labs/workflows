@@ -16,8 +16,6 @@ on:
     secrets:
       TRANSLATOR_API_KEY:
         required: true
-      NEWFOLD_ACCESS_TOKEN:
-        required: true
 
 permissions: {}
 
@@ -33,12 +31,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Check for existing translations PR and exit if found
         id: check_pr
         env:
-          GH_TOKEN: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           prs=$(gh pr list --state open --label 'translations' --json number --jq '.[].number')
           if [ -n "$prs" ]; then
@@ -76,7 +74,7 @@ jobs:
           path: 'translation-action-scripts'
           sparse-checkout: '.github/scripts/translate.py'
           sparse-checkout-cone-mode: false
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Translate PO and JSON files
         if: steps.check_pr.outputs.found == 'false'
@@ -93,42 +91,52 @@ jobs:
         id: datetime
         run: echo "timestamp=$(date -u '+%B %d, %Y at %H:%M UTC')" >> "$GITHUB_OUTPUT"
 
-      - name: Create Pull Request to update translations
+      - name: Configure Git identity
         if: steps.check_pr.outputs.found == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
-          BRANCH_NAME: ${{ steps.vars.outputs.BRANCH }}
-          TIMESTAMP: ${{ steps.datetime.outputs.timestamp }}
         run: |
-          # Configure Git identity
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-          # Ensure remote uses token for Git push
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-
-          # Create or reset to the branch
+      - name: Create or reset to branch
+        if: steps.check_pr.outputs.found == 'false'
+        env:
+          BRANCH_NAME: ${{ steps.vars.outputs.BRANCH }}
+        run: |
           git checkout -B "$BRANCH_NAME"
 
-          # Stage changes
-          git add .
+      - name: Stage changes
+        if: steps.check_pr.outputs.found == 'false'
+        run: git add .
+
+      - name: Commit changes
+        if: steps.check_pr.outputs.found == 'false'
+        run: |
           if git diff --cached --quiet; then
             echo "No changes to commit. Skipping PR creation."
             exit 0
           fi
-
-          # Commit and push (gh auth will handle credentials)
           git commit -m "Auto-translated PO and JSON files"
+
+      - name: Push changes
+        if: steps.check_pr.outputs.found == 'false'
+        env:
+          BRANCH_NAME: ${{ steps.vars.outputs.BRANCH }}
+        run: |
           git push --force origin "$BRANCH_NAME"
 
-          # Build PR body
+      - name: Create Pull Request
+        if: steps.check_pr.outputs.found == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: ${{ steps.vars.outputs.BRANCH }}
+          TIMESTAMP: ${{ steps.datetime.outputs.timestamp }}
+        run: |
           PR_BODY="$({
             echo "This pull request contains automatic translations of PO and JSON files."
             echo ""
             echo "The workflow run responsible for creating this pull request can be found [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})."
           })"
 
-          # Create PR using GitHub CLI
           gh pr create \
             --title "Updating translation files on ${TIMESTAMP}" \
             --body "$PR_BODY" \
