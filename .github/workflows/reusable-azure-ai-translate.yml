@@ -61,7 +61,7 @@ jobs:
 
       - name: Set branch name
         if: steps.check_pr.outputs.found == 'false'
-        id: vars
+        id: set_branch_name
         env:
           PR_BRANCH_NAME: ${{ inputs.pr_branch_name }}
         run: echo "BRANCH=auto-translate/$PR_BRANCH_NAME" >> "$GITHUB_OUTPUT"
@@ -74,7 +74,7 @@ jobs:
           path: 'translation-action-scripts'
           sparse-checkout: '.github/scripts/translate.py'
           sparse-checkout-cone-mode: false
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Translate PO and JSON files
         if: steps.check_pr.outputs.found == 'false'
@@ -100,7 +100,7 @@ jobs:
       - name: Create or reset to branch
         if: steps.check_pr.outputs.found == 'false'
         env:
-          BRANCH_NAME: ${{ steps.vars.outputs.BRANCH }}
+          BRANCH_NAME: ${{ steps.set_branch_name.outputs.BRANCH }}
         run: |
           git checkout -B "$BRANCH_NAME"
 
@@ -120,7 +120,7 @@ jobs:
       - name: Push changes
         if: steps.check_pr.outputs.found == 'false'
         env:
-          BRANCH_NAME: ${{ steps.vars.outputs.BRANCH }}
+          BRANCH_NAME: ${{ steps.set_branch_name.outputs.BRANCH }}
         run: |
           git push --force origin "$BRANCH_NAME"
 
@@ -128,7 +128,7 @@ jobs:
         if: steps.check_pr.outputs.found == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH_NAME: ${{ steps.vars.outputs.BRANCH }}
+          BRANCH_NAME: ${{ steps.set_branch_name.outputs.BRANCH }}
           TIMESTAMP: ${{ steps.datetime.outputs.timestamp }}
         run: |
           PR_BODY="$({
