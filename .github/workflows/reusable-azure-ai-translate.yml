@@ -30,6 +30,9 @@ jobs:
         with:
           persist-credentials: true
 
+      - name: Create or switch to branch
+        run: git checkout -B "$PR_BRANCH_NAME"
+
       - name: Check for existing translations PR
         id: check_pr
         env:
@@ -50,9 +53,6 @@ jobs:
 
       - name: Install Python dependencies
         run: pip install requests polib
-
-      - name: Create or switch to branch
-        run: git checkout -B "$PR_BRANCH_NAME"
 
       - name: Update branch with latest base branch changes (if PR exists)
         if: steps.check_pr.outputs.found == 'true'
