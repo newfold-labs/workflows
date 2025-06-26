@@ -38,7 +38,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          prs=$(gh pr list --state open --label 'translations' --base "${{ github.ref_name }}" --head "$PR_BRANCH_NAME" --json number --jq '.[0].number')
+          prs=$(gh pr list --state open --label 'translations' --base "$GITHUB_REF_NAME" --head "$PR_BRANCH_NAME" --json number --jq '.[0].number')
           if [ -n "$prs" ]; then
             echo "found=$pr" >> "$GITHUB_OUTPUT"
           else
@@ -49,7 +49,7 @@ jobs:
         if: steps.check_pr.outputs.found != 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr update-branch --yes || echo "::notice::No new changes in ${{ github.ref_name }}."
+        run: gh pr update-branch --yes || echo "::notice::No new changes in $GITHUB_REF_NAME."
 
       - name: Pull any changes from origin
         if: steps.check_pr.outputs.found != 'false'
@@ -126,7 +126,7 @@ jobs:
           PR_URL=$(gh pr create \
             --title "Updating translation files" \
             --body "$PR_BODY" \
-            --base "${{ github.ref_name }}" \
+            --base "$GITHUB_REF_NAME" \
             --head "PR_BRANCH_NAME" \
             --label "translations")
           
