@@ -35,9 +35,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          prs=$(gh pr list --state open --label 'translations' --base "${{ github.ref_name }}" --json number --jq '.[].number')
+          prs=$(gh pr list --state open --label 'translations' --base "${{ github.ref_name }}" --head "$PR_BRANCH_NAME" --json number --jq '.[0].number')
           if [ -n "$prs" ]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "found=$pr" >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
