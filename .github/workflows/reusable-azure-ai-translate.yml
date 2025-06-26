@@ -106,7 +106,7 @@ jobs:
 
       - name: Push changes
         if: steps.versioned-files-check.outputs.uncommitted_changes == 'true'
-        run: git push origin "PR_BRANCH_NAME"
+        run: git push origin "$PR_BRANCH_NAME"
 
       - name: Display updated pull request information
         if: steps.check_pr.outputs.found != 'false' && steps.versioned-files-check.outputs.uncommitted_changes == 'true'
@@ -127,7 +127,7 @@ jobs:
             --title "Updating translation files" \
             --body "$PR_BODY" \
             --base "$GITHUB_REF_NAME" \
-            --head "PR_BRANCH_NAME" \
+            --head "$PR_BRANCH_NAME" \
             --label "translations")
 
           echo "::notice::Created new pull request: $PR_URL."
