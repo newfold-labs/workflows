@@ -28,18 +28,15 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Check for existing translations PR and exit if found
+      - name: Check for existing translations PR
         id: check_pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          prs=$(gh pr list --state open --label 'translations' --json number --jq '.[].number')
+          prs=$(gh pr list --state open --label 'translations' --base "${{ github.ref_name }}" --json number --jq '.[].number')
           if [ -n "$prs" ]; then
-            echo 'A PR with "translations" label already exists:'
-            echo "$prs"
             echo "found=true" >> "$GITHUB_OUTPUT"
           else
-            echo 'No existing "translations" PR found. Continuing workflow.'
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -50,14 +47,23 @@ jobs:
           python-version: '3.x'
 
       - name: Install Python dependencies
-        if: steps.check_pr.outputs.found == 'false'
-        run: |
-          pip install requests polib
+        run: pip install requests polib
 
       - name: Set branch name
-        if: steps.check_pr.outputs.found == 'false'
         id: set_branch_name
         run: echo "BRANCH=auto-translate/${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Create or switch to branch
+        env:
+          BRANCH_NAME: ${{ steps.set_branch_name.outputs.BRANCH }}
+        run: |
+          git checkout -B "$BRANCH_NAME"
+
+      - name: Update branch with latest base branch changes (if PR exists)
+        if: steps.check_pr.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr update-branch --yes || echo "No need to update base"
 
       - name: Download translate.py from parent repo
         if: steps.check_pr.outputs.found == 'false'
@@ -70,51 +76,43 @@ jobs:
           persist-credentials: false
 
       - name: Translate PO and JSON files
-        if: steps.check_pr.outputs.found == 'false'
         env:
           TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
           TEXT_DOMAIN: ${{ inputs.text_domain }}
         run: python translation-action-scripts/.github/scripts/translate.py
 
       - name: Remove downloaded translate script
-        if: steps.check_pr.outputs.found == 'false'
         run: rm -rf translation-action-scripts
 
+      - name: Check for changes to versioned files
+        id: versioned-files-check
+        run: |
+          if git diff --quiet; then
+            echo "uncommitted_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "uncommitted_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure Git identity
-        if: steps.check_pr.outputs.found == 'false'
+        if: steps.versioned-files-check.outputs.uncommitted_changes == 'true'
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-      - name: Create or reset to branch
-        if: steps.check_pr.outputs.found == 'false'
-        env:
-          BRANCH_NAME: ${{ steps.set_branch_name.outputs.BRANCH }}
+      - name: Stage and commit changes
+        if: steps.versioned-files-check.outputs.uncommitted_changes == 'true'
         run: |
-          git checkout -B "$BRANCH_NAME"
-
-      - name: Stage changes
-        if: steps.check_pr.outputs.found == 'false'
-        run: git add .
-
-      - name: Commit changes
-        if: steps.check_pr.outputs.found == 'false'
-        run: |
-          if git diff --cached --quiet; then
-            echo "No changes to commit. Skipping PR creation."
-            exit 0
-          fi
+          git add .
           git commit -m "Auto-translated PO and JSON files"
 
       - name: Push changes
-        if: steps.check_pr.outputs.found == 'false'
+        if: steps.versioned-files-check.outputs.uncommitted_changes == 'true'
         env:
           BRANCH_NAME: ${{ steps.set_branch_name.outputs.BRANCH }}
-        run: |
-          git push --force origin "$BRANCH_NAME"
+        run: git push --force origin "$BRANCH_NAME"
 
       - name: Create Pull Request
-        if: steps.check_pr.outputs.found == 'false'
+        if: steps.check_pr.outputs.found == 'false' && steps.versioned-files-check.outputs.uncommitted_changes == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH_NAME: ${{ steps.set_branch_name.outputs.BRANCH }}
