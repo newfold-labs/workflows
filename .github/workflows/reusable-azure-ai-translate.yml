@@ -21,6 +21,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    env:
+      PR_BRANCH_NAME: 'auto-translate/${{ github.ref_name }}'
 
     steps:
       - name: Checkout code
@@ -49,15 +51,8 @@ jobs:
       - name: Install Python dependencies
         run: pip install requests polib
 
-      - name: Set branch name
-        id: set_branch_name
-        run: echo "BRANCH=auto-translate/${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-
       - name: Create or switch to branch
-        env:
-          BRANCH_NAME: ${{ steps.set_branch_name.outputs.BRANCH }}
-        run: |
-          git checkout -B "$BRANCH_NAME"
+        run: git checkout -B "$PR_BRANCH_NAME"
 
       - name: Update branch with latest base branch changes (if PR exists)
         if: steps.check_pr.outputs.found == 'true'
@@ -107,15 +102,12 @@ jobs:
 
       - name: Push changes
         if: steps.versioned-files-check.outputs.uncommitted_changes == 'true'
-        env:
-          BRANCH_NAME: ${{ steps.set_branch_name.outputs.BRANCH }}
-        run: git push --force origin "$BRANCH_NAME"
+        run: git push --force origin "PR_BRANCH_NAME"
 
       - name: Create Pull Request
         if: steps.check_pr.outputs.found == 'false' && steps.versioned-files-check.outputs.uncommitted_changes == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH_NAME: ${{ steps.set_branch_name.outputs.BRANCH }}
         run: |
           PR_BODY="$({
             echo "This pull request contains automatic translations of PO and JSON files."
@@ -127,5 +119,5 @@ jobs:
             --title "Updating translation files" \
             --body "$PR_BODY" \
             --base "${{ github.ref_name }}" \
-            --head "$BRANCH_NAME" \
+            --head "PR_BRANCH_NAME" \
             --label "translations"
