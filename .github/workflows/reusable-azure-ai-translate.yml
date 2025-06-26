@@ -7,11 +7,6 @@ on:
         description: 'Text domain for translation'
         required: true
         type: string
-      pr_branch_name:
-        description: 'Base branch name to create translation PR against'
-        required: false
-        default: 'main'
-        type: string
 
     secrets:
       TRANSLATOR_API_KEY:
@@ -62,9 +57,7 @@ jobs:
       - name: Set branch name
         if: steps.check_pr.outputs.found == 'false'
         id: set_branch_name
-        env:
-          PR_BRANCH_NAME: ${{ inputs.pr_branch_name }}
-        run: echo "BRANCH=auto-translate/$PR_BRANCH_NAME" >> "$GITHUB_OUTPUT"
+        run: echo "BRANCH=auto-translate/${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
 
       - name: Download translate.py from parent repo
         if: steps.check_pr.outputs.found == 'false'
@@ -86,10 +79,6 @@ jobs:
       - name: Remove downloaded translate script
         if: steps.check_pr.outputs.found == 'false'
         run: rm -rf translation-action-scripts
-
-      - name: Get human-readable datetime
-        id: datetime
-        run: echo "timestamp=$(date -u '+%B %d, %Y at %H:%M UTC')" >> "$GITHUB_OUTPUT"
 
       - name: Configure Git identity
         if: steps.check_pr.outputs.found == 'false'
@@ -129,7 +118,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH_NAME: ${{ steps.set_branch_name.outputs.BRANCH }}
-          TIMESTAMP: ${{ steps.datetime.outputs.timestamp }}
         run: |
           PR_BODY="$({
             echo "This pull request contains automatic translations of PO and JSON files."
@@ -138,8 +126,8 @@ jobs:
           })"
 
           gh pr create \
-            --title "Updating translation files on ${TIMESTAMP}" \
+            --title "Updating translation files" \
             --body "$PR_BODY" \
-            --base "${{ github.event.repository.default_branch }}" \
+            --base "${{ github.ref_name }}" \
             --head "$BRANCH_NAME" \
             --label "translations"
