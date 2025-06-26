@@ -129,5 +129,5 @@ jobs:
             --base "$GITHUB_REF_NAME" \
             --head "PR_BRANCH_NAME" \
             --label "translations")
-          
+
           echo "::notice::Created new pull request: $PR_URL."
