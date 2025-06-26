@@ -45,6 +45,12 @@ jobs:
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Update PR branch with latest changes
+        if: steps.check_pr.outputs.found != 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr update-branch --yes || echo "No new changes in ${{ github.ref_name }}."
+
       - name: Set up Python
         if: steps.check_pr.outputs.found == 'false'
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
@@ -53,12 +59,6 @@ jobs:
 
       - name: Install Python dependencies
         run: pip install requests polib
-
-      - name: Update branch with latest base branch changes (if PR exists)
-        if: steps.check_pr.outputs.found == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr update-branch --yes || echo "No need to update base"
 
       - name: Download translate.py from parent repo
         if: steps.check_pr.outputs.found == 'false'
