@@ -45,6 +45,36 @@ jobs:
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # When a pull request exists, there's no need to check for the branch remotely.
+      - name: Check if branch already exists remotely
+        id: branch-check
+        if: steps.check_pr.outputs.found == 'false'
+        run: |
+          if git ls-remote --exit-code --heads origin "$PR_BRANCH_NAME"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # For scenarios where the HEAD branch already exists without a corresponding pull request, merge the latest
+      # changes from the BASE branch.
+      - name: Merge latest changes from the base branch
+        if: steps.branch-check.outputs.exists == 'true'
+        run: git merge origin/"$GITHUB_REF_NAME" --no-edit
+
+      # Merging changes will sometimes result in merge conflicts. When that happens, someone needs to either manually
+      # review and perform the merge, or delete the branch on the remote before re-running the workflow.
+      - name: Check for merge conflicts
+        if: steps.branch-check.outputs.exists == 'true'
+        run: |
+          if git diff --name-only --diff-filter=U | grep .; then
+            echo "::error::Merge conflict detected in one or more files."
+            exit 1
+          else
+            echo "::notice::No merge conflicts detected."
+          fi
+
+      # When a pull request already exists, use GitHub CLI to merge changes from the BASE branch.
       - name: Update the HEAD branch of the pull request
         if: steps.check_pr.outputs.found != 'false'
         env:
