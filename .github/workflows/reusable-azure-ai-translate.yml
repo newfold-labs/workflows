@@ -45,7 +45,7 @@ jobs:
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Update HEAD branch with the latest changes
+      - name: Update the HEAD branch of the pull request
         if: steps.check_pr.outputs.found != 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
