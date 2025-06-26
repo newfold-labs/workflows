@@ -93,11 +93,13 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-      - name: Stage and commit changes
+      - name: Stage changes
         if: steps.versioned-files-check.outputs.uncommitted_changes == 'true'
-        run: |
-          git add .
-          git commit -m "Auto-translated PO and JSON files"
+        run: git add .
+
+      - name: Commit changes
+        if: steps.versioned-files-check.outputs.uncommitted_changes == 'true'
+        run: git commit -m "Auto-translated PO and JSON files"
 
       - name: Push changes
         if: steps.versioned-files-check.outputs.uncommitted_changes == 'true'
