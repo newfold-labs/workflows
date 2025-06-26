@@ -105,6 +105,10 @@ jobs:
         if: steps.versioned-files-check.outputs.uncommitted_changes == 'true'
         run: git push origin "PR_BRANCH_NAME"
 
+      - name: Display updated pull request information
+        if: steps.check_pr.outputs.found != 'false' && steps.versioned-files-check.outputs.uncommitted_changes == 'true'
+        run: echo "::notice::Changes pushed to existing pull request https://github.com/${{ github.repository }}/pull/${{ steps.check_pr.outputs.found }}."
+
       - name: Create Pull Request
         if: steps.check_pr.outputs.found == 'false' && steps.versioned-files-check.outputs.uncommitted_changes == 'true'
         env:
@@ -116,9 +120,11 @@ jobs:
             echo "The workflow run responsible for creating this pull request can be found [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})."
           })"
 
-          gh pr create \
+          PR_URL=$(gh pr create \
             --title "Updating translation files" \
             --body "$PR_BODY" \
             --base "${{ github.ref_name }}" \
             --head "PR_BRANCH_NAME" \
-            --label "translations"
+            --label "translations")
+          
+          echo "::notice::Created new pull request: $PR_URL."
