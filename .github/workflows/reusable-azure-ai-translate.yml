@@ -30,9 +30,6 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Create or switch to pull request branch
-        run: git checkout -B "$PR_BRANCH_NAME"
-
       - name: Check for an existing pull request
         id: check_pr
         env:
@@ -44,6 +41,25 @@ jobs:
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
+
+      # When the branch already exists remotely without a corresponding pull request, it should be deleted to ensure
+      # that the pull request can be cleanly merged with all changes from the `BASE` branch present.
+      - name: Check if branch already exists remotely
+        id: branch-check
+        if: steps.check_pr.outputs.found == 'false'
+        run: |
+          if git ls-remote --exit-code --heads origin "$PR_BRANCH_NAME"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Delete the preexisting remote branch
+        if: steps.check_pr.outputs.found != 'false' && steps.branch-check.outputs.exists == 'true'
+        run: git push origin --delete "$PR_BRANCH_NAME"
+
+      - name: Create or switch to pull request branch
+        run: git checkout -B "$PR_BRANCH_NAME"
 
       - name: Update the HEAD branch of the pull request
         if: steps.check_pr.outputs.found != 'false'
