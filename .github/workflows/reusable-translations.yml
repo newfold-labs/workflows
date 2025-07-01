@@ -92,7 +92,7 @@ jobs:
         run: git checkout -B "$PR_BRANCH_NAME"
 
       - name: Publish the branch
-        if: steps.check_pr.outputs.found == 'false' && steps.branch-check.outputs.exists == 'false'
+        if: steps.check_pr.outputs.found == 'false'
         run: git push origin "$PR_BRANCH_NAME"
 
   # Ensures that all translatable strings are present in the POT file for accurate processing.
