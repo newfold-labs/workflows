@@ -55,7 +55,7 @@ jobs:
           fi
 
       - name: Delete the preexisting remote branch
-        if: steps.check_pr.outputs.found != 'false' && steps.branch-check.outputs.exists == 'true'
+        if: steps.check_pr.outputs.found == 'false' && steps.branch-check.outputs.exists == 'true'
         run: git push origin --delete "$PR_BRANCH_NAME"
 
       - name: Create or switch to pull request branch
