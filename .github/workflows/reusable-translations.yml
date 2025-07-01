@@ -105,7 +105,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
-          ref: ${{ PR_BRANCH_NAME }}
+          ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: false
 
       - name: Set Up PHP
@@ -156,7 +156,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
-          ref: ${{ PR_BRANCH_NAME }}
+          ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: false
 
       - name: Check for a patch file
@@ -217,7 +217,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
-          ref: ${{ PR_BRANCH_NAME }}
+          ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: false
 
       - name: Check for a patch file
@@ -284,7 +284,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
-          ref: ${{ PR_BRANCH_NAME }}
+          ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: true
 
       - name: Check for a patch file
@@ -320,7 +320,9 @@ jobs:
 
       - name: Display updated pull request information
         if: steps.needs.prepare-pr-branch.check_pr.outputs.found != 'false'
-        run: echo "::notice::Changes pushed to existing pull request https://github.com/${{ github.repository }}/pull/${{ steps.needs.prepare-pr-branch.check_pr.outputs.found }}."
+        env:
+          PR_NUMBER: ${{ steps.needs.prepare-pr-branch.check_pr.outputs.found }}
+        run: echo "::notice::Changes pushed to existing pull request https://github.com/${{ github.repository }}/pull/$PR_NUMBER."
 
       - name: Create Pull Request
         if: steps.needs.prepare-pr-branch.check_pr.outputs.found == 'false'
