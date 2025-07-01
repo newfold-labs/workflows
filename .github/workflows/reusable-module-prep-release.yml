@@ -221,36 +221,57 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # create the release branch, commit the changes, and create pull request
-      - name: Create Release Pull Request
+      # create the release branch, commit the changes with the github-actions[bot]
+      - name: Create and commit to release branch
+        id: push-changes
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OLD_VERSION: ${{ steps.old.outputs.version }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          RELEASE_BRANCH="release/${NEW_VERSION}"
+          git checkout -b "$RELEASE_BRANCH"
+          git add .
+          git commit -m "🤖 prep for release - ${OLD_VERSION} → ${NEW_VERSION}"
+          git push origin "$RELEASE_BRANCH"
+
+      - name: Create Pull Request to target branch
+        id: create_pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OLD_VERSION: ${{ steps.old.outputs.version }}
           NEW_VERSION: ${{ steps.new.outputs.version }}
           POST_SET_VERSION_MESSAGE: ${{ steps.run-post-set-version.outputs.message }}
           BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
           I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
           MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
-        id: create_pr
-        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
-        with:
-          token: ${{ github.token }}
-          base: ${{ inputs.module-branch }}
-          branch: release/${{ steps.new.outputs.version }}
-          title: "Automated ${{ inputs.level }} release: ${{ steps.new.outputs.version }}"
-          body: |
-            ## Changes in this pull request
+          RELEASE_LEVEL: ${{ inputs.level }}
+          PLUGIN_TARGET_BRANCH: ${{ inputs.plugin-target-branch }}
+        run: |
+          RELEASE_BRANCH="release/${NEW_VERSION}"
+          PR_BODY="$({
+            echo "## Changes in this pull request"
+            echo "- Bumped version from \`${OLD_VERSION}\` to \`${NEW_VERSION}\`"
+            echo "- ${POST_SET_VERSION_MESSAGE}"
+            echo "- ${BUILD_OUTPUT_MESSAGE}"
+            echo "- ${I18N_OUTPUT_MESSAGE}"
+            echo ""
+            echo "## Merged PRs since last release"
+            echo "${MERGED_PRS}"
+            echo ""
+            echo "_Generated automatically by CI workflow (see prep-release workflow)._"
+          })"
 
-            - Bumped version from `${OLD_VERSION}` to `${NEW_VERSION}`
-            - ${POST_SET_VERSION_MESSAGE}
-            - ${BUILD_OUTPUT_MESSAGE}
-            - ${I18N_OUTPUT_MESSAGE}
+          PR_URL=$(gh pr create \
+            --title "Automated ${RELEASE_LEVEL} release: ${NEW_VERSION}" \
+            --body "$PR_BODY" \
+            --base "${PLUGIN_TARGET_BRANCH}" \
+            --head "$RELEASE_BRANCH" )
 
-            ## Merged PRs since last release
-
-            ${MERGED_PRS}
-
-            _Generated automatically by CI workflow (see prep-release workflow)._
-          commit-message: "🤖 prep for release - ${{ steps.old.outputs.version }} → ${{ steps.new.outputs.version }}"
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
 
       - name: Write release summary to workflow summary
         env:
@@ -260,7 +281,6 @@ jobs:
           BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
           I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
           MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
-          PR_NUMBER: ${{ steps.create_pr.outputs.pull-request-number }}
           PR_URL: ${{ steps.create_pr.outputs.pull-request-url }}
         run: |
           {
@@ -268,7 +288,7 @@ jobs:
             echo ""
             echo "- **Version bump**: ${OLD_VERSION} → ${NEW_VERSION}"
             echo "- **Release branch created**: \`release/${NEW_VERSION}\`"
-            echo "- **Pull request created**: [View PR #${PR_NUMBER}](${PR_URL})"
+            echo "- **Pull request created**: ${PR_URL}"
             echo ""
             echo "### Merged PRs since last release"
             echo "${MERGED_PRS}"
