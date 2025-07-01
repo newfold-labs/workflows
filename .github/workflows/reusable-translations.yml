@@ -208,7 +208,6 @@ jobs:
   process-translations:
     name: Runs scripts post-translation
     runs-on: ubuntu-latest
-    if: inputs.run-i18n-script
     needs: [ 'prepare-pr-branch', 'prepare-for-translation', 'auto-translate-with-azure' ]
     permissions:
       contents: read
@@ -275,7 +274,7 @@ jobs:
   create-translation-pr:
     name: Create a Pull Request for Translation Updates
     runs-on: ubuntu-latest
-    needs: [ 'prepare-pr-branch', 'prepare-for-translation', 'auto-translate-with-azure', 'run-translation-scripts' ]
+    needs: [ 'prepare-pr-branch', 'prepare-for-translation', 'auto-translate-with-azure', 'process-translations' ]
     permissions:
       contents: write
       pull-requests: write
@@ -319,13 +318,13 @@ jobs:
         run: git push origin "$PR_BRANCH_NAME"
 
       - name: Display updated pull request information
-        if: steps.needs.prepare-pr-branch.check_pr.outputs.found != 'false'
+        if: job.needs.prepare-pr-branch.check_pr.outputs.found != 'false'
         env:
-          PR_NUMBER: ${{ steps.needs.prepare-pr-branch.check_pr.outputs.found }}
+          PR_NUMBER: ${{ job.needs.prepare-pr-branch.check_pr.outputs.found }}
         run: echo "::notice::Changes pushed to existing pull request https://github.com/${{ github.repository }}/pull/$PR_NUMBER."
 
       - name: Create Pull Request
-        if: steps.needs.prepare-pr-branch.check_pr.outputs.found == 'false'
+        if: job.needs.prepare-pr-branch.check_pr.outputs.found == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
