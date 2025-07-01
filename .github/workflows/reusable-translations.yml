@@ -201,6 +201,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/updated-translations.diff
           retention-days: 7
+          overwrite: true
 
   # Runs any repository defined translation scripts.
   #
