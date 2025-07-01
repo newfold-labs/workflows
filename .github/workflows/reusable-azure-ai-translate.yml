@@ -80,21 +80,16 @@ jobs:
         run: pip install requests polib
 
       - name: Download translation scripts from workflow repository
-        run: |
-          mkdir -p "$RUNNER_TEMP/translation-action-scripts"
-          git clone --filter=blob:none --sparse https://github.com/newfold-labs/workflows.git "$RUNNER_TEMP/translation-action-scripts/workflows"
-          cd "$RUNNER_TEMP/translation-action-scripts/workflows"
-          git sparse-checkout set .github/scripts
-          cp .github/scripts/translate.py "$RUNNER_TEMP/translation-action-scripts/translate.py"
+        run: curl -o "$RUNNER_TEMP/translate.py" https://raw.githubusercontent.com/newfold-labs/workflows/refs/heads/main/.github/scripts/translate.py
 
       - name: Translate PO and JSON files
         env:
           TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
           TEXT_DOMAIN: ${{ inputs.text_domain }}
-        run: python "$RUNNER_TEMP/translation-action-scripts/translate.py"
+        run: python "$RUNNER_TEMP/translate.py"
 
       - name: Remove downloaded translate script
-        run: rm -rf "$RUNNER_TEMP/translation-action-scripts"
+        run: rm "$RUNNER_TEMP/translate.py"
 
       - name: Check for changes to versioned files
         id: versioned-files-check
