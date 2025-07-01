@@ -80,25 +80,16 @@ jobs:
         run: pip install requests polib
 
       - name: Download translation scripts from workflow repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-        with:
-          repository: 'newfold-labs/workflows'
-          path: '${{ runner.temp }}/translation-action-scripts'
-          sparse-checkout: '.github/scripts/translate.py'
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
+        run: curl -o "$RUNNER_TEMP/translate.py" https://raw.githubusercontent.com/newfold-labs/workflows/refs/heads/main/.github/scripts/translate.py
 
       - name: Translate PO and JSON files
         env:
           TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
           TEXT_DOMAIN: ${{ inputs.text_domain }}
-          TEMP_DIR: ${{ runner.temp }}
-        run: python "$TEMP_DIR/translation-action-scripts/.github/scripts/translate.py"
+        run: python "$RUNNER_TEMP/translate.py"
 
       - name: Remove downloaded translate script
-        env:
-          TEMP_DIR: ${{ runner.temp }}
-        run: rm -rf "$TEMP_DIR/translation-action-scripts"
+        run: rm "$RUNNER_TEMP/translate.py"
 
       - name: Check for changes to versioned files
         id: versioned-files-check
