@@ -281,7 +281,7 @@ jobs:
           BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
           I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
           MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
-          PR_URL: ${{ steps.create_pr.outputs.pull-request-url }}
+          PR_URL: ${{ steps.create_pr.outputs.pr_url }}
         run: |
           {
             echo "## 🚀 Release Prep Summary"
