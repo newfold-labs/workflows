@@ -136,7 +136,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: ${{ runner.temp }}/updated-translations.diff
-          retention-days: 1
+          retention-days: 7
 
   # Runs any repository defined translation scripts.
   #
@@ -202,7 +202,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: ${{ runner.temp }}/updated-translations.diff
-          retention-days: 1
+          retention-days: 7
           overwrite: true
 
   # Uses the generated patch file to create a pull request.
