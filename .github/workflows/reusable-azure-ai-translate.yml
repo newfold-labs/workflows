@@ -83,7 +83,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
           repository: 'newfold-labs/workflows'
-          path: 'translation-action-scripts'
+          path: '${{ runner.temp }}/translation-action-scripts'
           sparse-checkout: '.github/scripts/translate.py'
           sparse-checkout-cone-mode: false
           persist-credentials: false
@@ -92,10 +92,13 @@ jobs:
         env:
           TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
           TEXT_DOMAIN: ${{ inputs.text_domain }}
-        run: python translation-action-scripts/.github/scripts/translate.py
+          TEMP_DIR: ${{ runner.temp }}
+        run: python "$TEMP_DIR/translation-action-scripts/.github/scripts/translate.py"
 
-      - name: Remove translation scripts
-        run: rm -rf translation-action-scripts
+      - name: Remove downloaded translate script
+        env:
+          TEMP_DIR: ${{ runner.temp }}
+        run: rm -rf "$TEMP_DIR/translation-action-scripts"
 
       - name: Check for changes to versioned files
         id: versioned-files-check
