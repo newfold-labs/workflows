@@ -256,7 +256,7 @@ jobs:
 
       - name: Run Post-CI i18n scripts
         env:
-          SCRIPT_LOCATION: ${{ inputs.i18n-script-location == 'npm ' && 'npm' || 'composer' }}
+          SCRIPT_LOCATION: ${{ inputs.i18n-script-location == 'npm' && 'npm' || 'composer' }}
         run: $SCRIPT_LOCATION run i18n-ci-post
 
       - name: Add any new language files
