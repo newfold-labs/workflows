@@ -95,7 +95,6 @@ jobs:
         run: python "translation-action-scripts/.github/scripts/translate.py"
 
       - name: Remove downloaded translate script
-        env:
         run: rm -rf "translation-action-scripts"
 
       - name: Check for changes to versioned files
