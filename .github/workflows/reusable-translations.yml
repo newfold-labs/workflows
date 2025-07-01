@@ -318,13 +318,13 @@ jobs:
         run: git push origin "$PR_BRANCH_NAME"
 
       - name: Display updated pull request information
-        if: job.needs.prepare-pr-branch.check_pr.outputs.found != 'false'
+        if: jobs.needs.prepare-pr-branch.check_pr.outputs.found != 'false'
         env:
-          PR_NUMBER: ${{ job.needs.prepare-pr-branch.check_pr.outputs.found }}
+          PR_NUMBER: ${{ jobs.needs.prepare-pr-branch.check_pr.outputs.found }}
         run: echo "::notice::Changes pushed to existing pull request https://github.com/${{ github.repository }}/pull/$PR_NUMBER."
 
       - name: Create Pull Request
-        if: job.needs.prepare-pr-branch.check_pr.outputs.found == 'false'
+        if: jobs.needs.prepare-pr-branch.check_pr.outputs.found == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
