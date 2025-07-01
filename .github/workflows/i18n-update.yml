@@ -1,3 +1,6 @@
+# NOTE: This workflow is considered deprecated and is replaced by the `reusable-translations.yml` one.
+#
+# This workflow runs i18n related scripts and creates a pull request with any resulting changes.
 name: i18n Update Workflow
 
 on:
