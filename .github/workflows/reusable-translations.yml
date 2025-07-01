@@ -45,6 +45,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+    outputs:
+      pr_found: ${{ steps.check_pr.outputs.found }}
 
     steps:
       - name: Checkout repository
@@ -318,13 +320,13 @@ jobs:
         run: git push origin "$PR_BRANCH_NAME"
 
       - name: Display updated pull request information
-        if: needs.prepare-pr-branch.check_pr.outputs.found != 'false'
+        if: needs.prepare-pr-branch.outputs.pr_found != 'false'
         env:
-          PR_NUMBER: ${{ needs.prepare-pr-branch.check_pr.outputs.found }}
+          PR_NUMBER: ${{ needs.prepare-pr-branch.outputs.pr_found }}
         run: echo "::notice::Changes pushed to existing pull request https://github.com/${{ github.repository }}/pull/$PR_NUMBER."
 
       - name: Create Pull Request
-        if: needs.prepare-pr-branch.check_pr.outputs.found == 'false'
+        if: needs.prepare-pr-branch.outputs.pr_found == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
