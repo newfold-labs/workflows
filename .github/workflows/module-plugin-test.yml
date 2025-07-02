@@ -240,7 +240,10 @@ jobs:
           echo "PACKAGE=${REPO##*/}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare files
-        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . ${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
+          PACKAGE: ${{ steps.workflow.outputs.PACKAGE }}
+        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . "$DIST/$PACKAGE"
 
       - name: List Files
         working-directory: ${{ steps.workflow.outputs.DIST }}
@@ -252,7 +255,10 @@ jobs:
           name: ${{ inputs.artifact-name != '' && inputs.artifact-name || steps.workflow.outputs.PACKAGE }}
 
       - name: Configure WordPress
-        run: echo '{"plugins":["${{ steps.workflow.outputs.DIST }}/${{ steps.workflow.outputs.PACKAGE }}"]}' > .wp-env.override.json
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
+          PACKAGE: ${{ steps.workflow.outputs.PACKAGE }}
+        run: echo '{"plugins":["$DIST/$PACKAGE"]}' > .wp-env.override.json
 
       - name: Install WordPress
         run: npx @wordpress/env@latest start --debug
