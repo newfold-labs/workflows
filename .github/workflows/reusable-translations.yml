@@ -369,10 +369,11 @@ jobs:
           path: ${{ runner.temp }}
 
       - name: Stop the workflow run when no patch is found
-        if: steps.download-artifact.outcome != 'success'
         run: |
-          echo "::info::No patch file found. No translation updates to commit."
-          exit 0
+          if [ ! -s "$RUNNER_TEMP/updated-translations.diff" ]; then
+            echo "::info::No patch file found. No translation updates to commit."
+            exit 0
+          fi
 
       - name: Apply the patch file
         run: git apply "$RUNNER_TEMP/updated-translations.diff"
