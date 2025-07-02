@@ -1,3 +1,13 @@
+# A reusable workflow for automating and managing translation files.
+#
+# By default, this workflow will attempt to translate untranslated strings using the Azure AI translation service.
+#
+# This workflow assumes the following:
+# - The calling repository has a `i18n`, `i18n-ci-pre`, `i18n-ci-post` in the `composer.json` file.
+# - If there are additional scripts that must be run when processing translations for some reason, then the
+#   `package.json` file must also contain the `i18n`, `i18n-ci-pre`, and `i18n-ci-post` scripts. They should run the
+#   corresponding Composer scripts, plus any other necessary scripts.
+#
 name: Reusable Translation Workflow
 
 on:
@@ -38,7 +48,6 @@ jobs:
   # - When both a pull request and the HEAD branch do not exist, a new fresh branch is created from BASE and published.
   #
   # If a HEAD branch for a pull request is deleted, the pull request is automatically closed.
-  #
   prepare-pr-branch:
     name: Prepare Pull Request Branch
     runs-on: ubuntu-latest
@@ -95,7 +104,19 @@ jobs:
         if: steps.check_pr.outputs.found == 'false'
         run: git push origin "$PR_BRANCH_NAME"
 
-  # Ensures that all translatable strings are present in the POT file for accurate processing.
+  # Ensures that all strings are accurately accounted for before performing any further translation steps.
+  #
+  # In order for missing strings to be translated, they must all be present in the POT and PO files.
+  #
+  # This job will:
+  # - Check out the repository.
+  # - Sets up PHP.
+  # - Installs Composer dependencies.
+  # - Sets up Node.js (if necessary).
+  # - Installs npm dependencies (if necessary).
+  # - Runs the `i18n-ci-pre` script to ensure that all strings are accounted for.
+  # - Creates a diff file of the changes.
+  # - Saves the diff file as an artifact for use in future steps.
   prepare-for-translation:
     name: Ensure the necessary components are updated
     runs-on: ubuntu-latest
@@ -114,7 +135,6 @@ jobs:
         uses: shivammathur/setup-php@9e72090525849c5e82e596468b86eb55e9cc5401 # v2.32.0
         with:
           php-version: "8.0"
-          tools: composer
 
       - name: Install Composer dependencies
         uses: ramsey/composer-install@a2636af0004d1c0499ffca16ac0b4cc94df70565 # v3.1.0
@@ -137,15 +157,32 @@ jobs:
         run: $SCRIPT_LOCATION run i18n-ci-pre
 
       - name: Create a diff file
-        run: git diff > "$RUNNER_TEMP/updated-translations.diff"
+        run: |
+          if ! git diff --quiet; then
+            git diff > "$RUNNER_TEMP/updated-translations.diff"
+          fi
 
       - name: Save patch as an artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
+          name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}/updated-translations.diff
           retention-days: 7
+          overwrite: true
 
-  # Automatically translates strings using Azure AI.
+  # Automatically translates untranslated strings using the Azure AI translation service.
+  #
+  # This job will:
+  # - Check out the repository.
+  # - Downloads the patch file from the previous step.
+  # - Applies the patch file.
+  # - Sets up Python.
+  # - Installs Python dependencies.
+  # - Downloads the Python translation script from the workflow repository.
+  # - Translates PO and JSON files using the Azure AI translation service.
+  # - Removes the downloaded translation script.
+  # - Creates a diff file of the changes.
+  # - Saves the diff file as an artifact for use in future steps.
   auto-translate-with-azure:
     name: Auto-Translate with Azure AI
     runs-on: ubuntu-latest
@@ -166,7 +203,7 @@ jobs:
         id: download-artifact
         continue-on-error: true
         with:
-          name: updated-translations.diff
+          name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}
 
       - name: Apply the patch file
@@ -194,20 +231,35 @@ jobs:
         run: rm "$RUNNER_TEMP/translate.py"
 
       - name: Create a diff file
-        run: git diff > "$RUNNER_TEMP/updated-translations.diff"
+        run: |
+          if ! git diff --quiet; then
+            git diff > "$RUNNER_TEMP/updated-translations.diff"
+          fi
 
       - name: Save patch as an artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
+          name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}/updated-translations.diff
           retention-days: 7
           overwrite: true
 
-  # Runs any repository defined translation scripts.
-  #
-  # This allows a repository to control and customize how translation files are built and packaged while still taking
-  # advantage of the Azure AI translation service above.
-  #
+    # Runs post-translation scripts to finalize the translation updates.
+    #
+    # After translating strings, the PHP and JSON files need to be generated to ensure WordPress can properly display
+    # any newly translated strings.
+    #
+    # This job will:
+    # - Check out the repository.
+    # - Downloads the patch file from the previous step.
+    # - Applies the patch file.
+    # - Sets up PHP.
+    # - Installs Composer dependencies.
+    # - Sets up Node.js (if necessary).
+    # - Installs npm dependencies (if necessary).
+    # - Runs the `i18n-ci-post` script to ensure all translated strings are available.
+    # - Creates a diff file of the changes.
+    # - Saves the diff file as an artifact for use in future steps.
   process-translations:
     name: Runs scripts post-translation
     runs-on: ubuntu-latest
@@ -227,7 +279,7 @@ jobs:
         id: download-artifact
         continue-on-error: true
         with:
-          name: updated-translations.diff
+          name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}
 
       - name: Apply the patch file
@@ -238,7 +290,6 @@ jobs:
         uses: shivammathur/setup-php@9e72090525849c5e82e596468b86eb55e9cc5401 # v2.32.0
         with:
           php-version: "8.0"
-          tools: composer
 
       - name: Install Composer dependencies
         uses: ramsey/composer-install@a2636af0004d1c0499ffca16ac0b4cc94df70565 # v3.1.0
@@ -264,16 +315,34 @@ jobs:
         run: git add -A languages/
 
       - name: Create a diff file
-        run: git diff --cached > "$RUNNER_TEMP/updated-translations.diff"
+        run: |
+          if ! git diff --quiet; then
+            git diff > "$RUNNER_TEMP/updated-translations.diff"
+          fi
 
       - name: Save new patch as an artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
+          name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}/updated-translations.diff
           retention-days: 7
           overwrite: true
 
-  # Uses the generated patch file to create a pull request.
+  # Manages the pull request for translation updates.
+  #
+  # When a pull request already exists, the new changes are pushed to the existing HEAD branch.
+  #
+  # This job will:
+  # - Check out the repository.
+  # - Downloads the patch file from the previous step.
+  # - Stops the workflow run when no patch file is found.
+  # - Sets up Node.js (if necessary).
+  # - Applies the patch file to the HEAD branch.
+  # - Configures the Git identity.
+  # - Stages all changes, including new, untracked files.
+  # - Commits the staged changes.
+  # - Pushes the changes to the HEAD branch.
+  # - Creates a new pull request or notes which one was updated.
   create-translation-pr:
     name: Create a Pull Request for Translation Updates
     runs-on: ubuntu-latest
@@ -294,14 +363,15 @@ jobs:
         id: download-artifact
         continue-on-error: true
         with:
-          name: updated-translations.diff
+          name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}
 
       - name: Stop the workflow run when no patch is found
-        if: steps.download-artifact.outcome != 'success'
         run: |
-          echo "::info::No patch file found. No translation updates to commit."
-          exit 0
+          if [ ! -s "$RUNNER_TEMP/updated-translations.diff" ]; then
+            echo "::info::No patch file found. No translation updates to commit."
+            exit 0
+          fi
 
       - name: Apply the patch file
         run: git apply "$RUNNER_TEMP/updated-translations.diff"
