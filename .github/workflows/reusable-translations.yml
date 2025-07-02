@@ -145,6 +145,7 @@ jobs:
           name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}/updated-translations.diff
           retention-days: 7
+          overwrite: true
 
   # Automatically translates strings using Azure AI.
   auto-translate-with-azure:
