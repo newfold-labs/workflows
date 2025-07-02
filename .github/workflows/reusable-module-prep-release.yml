@@ -249,7 +249,7 @@ jobs:
           I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
           MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
           RELEASE_LEVEL: ${{ inputs.level }}
-          PLUGIN_TARGET_BRANCH: ${{ inputs.plugin-target-branch }}
+          MODULE_TARGET_BRANCH: ${{ inputs.module-branch }}
         run: |
           RELEASE_BRANCH="release/${NEW_VERSION}"
           PR_BODY="$({
@@ -268,7 +268,7 @@ jobs:
           PR_URL=$(gh pr create \
             --title "Automated ${RELEASE_LEVEL} release: ${NEW_VERSION}" \
             --body "$PR_BODY" \
-            --base "${PLUGIN_TARGET_BRANCH}" \
+            --base "${MODULE_TARGET_BRANCH}" \
             --head "$RELEASE_BRANCH" )
 
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
