@@ -365,7 +365,7 @@ jobs:
         id: download-artifact
         continue-on-error: true
         with:
-          name: updated-translations.diff
+          name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}
 
       - name: Stop the workflow run when no patch is found
