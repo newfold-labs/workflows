@@ -91,7 +91,7 @@ jobs:
         if: steps.check_pr.outputs.found != 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr update-branch --yes || echo "::notice::No strings missing from POT file. in $GITHUB_REF_NAME."
+        run: gh pr update-branch --yes || echo "::notice::No new changes in $GITHUB_REF_NAME."
 
       - name: Delete an orphaned branch with no pull request
         if: steps.check_pr.outputs.found == 'false' && steps.branch-check.outputs.exists == 'true'
@@ -318,6 +318,8 @@ jobs:
         run: |
           if ! git diff --quiet; then
             git diff > "$RUNNER_TEMP/updated-translations.diff"
+          else
+            echo "::notice::No strings were missing from the POT or PO files."
           fi
 
       - name: Save new patch as an artifact
@@ -369,7 +371,7 @@ jobs:
       - name: Stop the workflow run when no patch is found
         run: |
           if [ ! -s "$RUNNER_TEMP/updated-translations.diff" ]; then
-            echo "::notice::No patch file found. No translation updates to commit."
+            echo "::notice::There are no translation updates to commit."
             exit 0
           fi
 
