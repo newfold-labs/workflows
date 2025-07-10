@@ -318,6 +318,8 @@ jobs:
         run: |
           if ! git diff --quiet; then
             git diff > "$RUNNER_TEMP/updated-translations.diff"
+          else
+            echo "::notice::No strings were missing from the POT or PO files."
           fi
 
       - name: Save new patch as an artifact
@@ -369,7 +371,7 @@ jobs:
       - name: Stop the workflow run when no patch is found
         run: |
           if [ ! -s "$RUNNER_TEMP/updated-translations.diff" ]; then
-            echo "::info::No patch file found. No translation updates to commit."
+            echo "::notice::There are no translation updates to commit."
             exit 0
           fi
 
