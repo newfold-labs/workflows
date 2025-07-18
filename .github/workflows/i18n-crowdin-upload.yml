@@ -29,7 +29,7 @@ jobs:
           persist-credentials: false
 
       - name: crowdin action
-        uses: crowdin/github-action@2cc7959c565767d6bc118118d6df3b63bf361370 # v2.6.1
+        uses: crowdin/github-action@9fd07c1c5b36b15f082d1d860dc399f16f849bd7 # v2.9.0
         with:
           upload_sources: true
           upload_translations: true
