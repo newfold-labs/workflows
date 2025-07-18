@@ -98,7 +98,7 @@ jobs:
         run: composer validate
 
       - name: Install PHP Dependencies
-        uses: ramsey/composer-install@a2636af0004d1c0499ffca16ac0b4cc94df70565 # v3.1.0
+        uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
         with:
           composer-options: "--optimize-autoloader --verbose"
 
