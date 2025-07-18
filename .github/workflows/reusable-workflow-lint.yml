@@ -144,7 +144,7 @@ jobs:
   #
   # Performs the following steps:
   # - Checks out the repository.
-  # - Runs Zizmor.
+  # - Runs the zizmor action that scans workflow files and uploads a SARIF file to GitHub.
   zizmor:
     name: zizmor
     runs-on: ubuntu-24.04

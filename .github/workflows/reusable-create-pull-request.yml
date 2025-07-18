@@ -1,0 +1,54 @@
+# A reusable workflow for creating a pull request in a repository.
+name: Reusable Create Pull Request
+
+on:
+  workflow_call:
+    base-branch:
+      description: 'The name of the base branch to create the pull request against.'
+      type: string
+      default: main
+    head-branch:
+      description: 'The name of the head branch to create the pull request from.'
+      required: true
+      type: string
+    workflow-id:
+      description: 'The ID of the workflow that produced the required artifacts.'
+      required: true
+      type: string
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured individually for each job.
+permissions: { }
+
+jobs:
+
+  create-pull-request:
+    name: Create Pull Request
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Retrieve artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: 'pr-artifacts-${{ inputs.workflow-id }}-*'
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: true
+
+      - name: Create Pull Request
+        if: false
+        id: create_pr
+        run: |
+          gh pr create \
+            --base ${{ inputs.base-branch }} \
+            --title "Update ${artifact_name} artifact" \
+            --body "This pull request updates the ${artifact_name} artifact." \
+            --head ${{ github.head_ref }} \
+            --label "artifact-update" \
+            --draft
