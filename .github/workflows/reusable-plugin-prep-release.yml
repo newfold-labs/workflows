@@ -187,6 +187,18 @@ jobs:
             echo "message=⚠️ Warning: i18n script not defined." >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Stage all changes
+        run: git add -A
+
+      - name: Generated a diff file
+        run: git diff --cached > "${GITHUB_WORKSPACE}/release-diff.patch"
+
+      - name: Save patch file as an artifact
+        uses: actions/upload-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr-artifacts-${{ github.run_id }}-patch
+          path: release-diff.patch
+
       - name: Get merged PRs since last tag/release
         id: merged-prs
         env:
@@ -228,38 +240,28 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # create the release branch, commit the changes with the github-actions[bot]
-      - name: Create and commit to release branch
-        id: push-changes
+      - name: Generate commit message
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OLD_VERSION: ${{ steps.old.outputs.version }}
           NEW_VERSION: ${{ steps.new.outputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        run: echo "🤖 prep for release - ${OLD_VERSION} → ${NEW_VERSION}" > commit-message.md
 
-          RELEASE_BRANCH="release/${NEW_VERSION}"
-          git checkout -b "$RELEASE_BRANCH"
-          git add .
-          git commit -m "🤖 prep for release - ${OLD_VERSION} → ${NEW_VERSION}"
-          git push origin "$RELEASE_BRANCH"
+      - name: Save commit message as an artifact
+        uses: actions/upload-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr-artifacts-${{ github.run_id }}-commit-message
+          path: commit-message.md
 
-      - name: Create Pull Request to target branch
-        id: create_pr
+      - name: Generate the pull request body
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OLD_VERSION: ${{ steps.old.outputs.version }}
           NEW_VERSION: ${{ steps.new.outputs.version }}
           POST_SET_VERSION_MESSAGE: ${{ steps.run-post-set-version.outputs.message }}
           BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
           I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
           MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
-          RELEASE_LEVEL: ${{ inputs.level }}
-          PLUGIN_TARGET_BRANCH: ${{ inputs.plugin-target-branch }}
         run: |
-          RELEASE_BRANCH="release/${NEW_VERSION}"
-          PR_BODY="$({
+          {
             echo "## Changes in this pull request"
             echo "- Bumped version from \`${OLD_VERSION}\` to \`${NEW_VERSION}\`"
             echo "- ${POST_SET_VERSION_MESSAGE}"
@@ -270,15 +272,13 @@ jobs:
             echo "${MERGED_PRS}"
             echo ""
             echo "_Generated automatically by CI workflow (see prep-release workflow)._"
-          })"
+          } > pr-body.md
 
-          PR_URL=$(gh pr create \
-            --title "Automated ${RELEASE_LEVEL} release: ${NEW_VERSION}" \
-            --body "$PR_BODY" \
-            --base "${PLUGIN_TARGET_BRANCH}" \
-            --head "$RELEASE_BRANCH" )
-
-          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+      - name: Save pull request body as an artifact
+        uses: actions/upload-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr-artifacts-${{ github.run_id }}-pr-body
+          path: pr-body.md
 
       - name: Write release summary to workflow summary
         env:
@@ -288,7 +288,6 @@ jobs:
           BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
           I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
           MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
-          PR_URL: ${{ steps.create_pr.outputs.pr_url }}
         run: |
           {
             echo "## 🚀 Release Prep Summary"
