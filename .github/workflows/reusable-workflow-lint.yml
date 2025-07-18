@@ -138,15 +138,15 @@ jobs:
           sarif_file: results.sarif
           category: poutine
 
-  # Performs a scan of GitHub Action workflow files using Zizmor.
+  # Performs a scan of GitHub Action workflow files using zizmor.
   #
-  # Zizmor is a static analysis tool for GitHub Actions that can find many common security issues in typical setups.
+  # zizmor is a static analysis tool for GitHub Actions that can find many common security issues in typical setups.
   #
   # Performs the following steps:
   # - Checks out the repository.
   # - Runs Zizmor.
   zizmor:
-    name: Zizmor
+    name: zizmor
     runs-on: ubuntu-24.04
     permissions:
       security-events: write
