@@ -1,0 +1,114 @@
+# A reusable workflow for creating a pull request in a repository.
+name: Reusable Create Pull Request
+
+on:
+  workflow_call:
+    base-branch:
+      description: 'The name of the BASE branch to create the pull request against.'
+      type: string
+      default: main
+    head-branch:
+      description: 'The name of the HEAD branch to create the pull request from.'
+      required: true
+      type: string
+    workflow-id:
+      description: 'The ID of the workflow that produced the required artifacts.'
+      required: true
+      type: string
+    pr-title:
+      description: 'The title of the pull request.'
+      required: true
+      type: string
+    pr-labels:
+      description: 'A comma-separated list of labels to apply to the pull request.'
+      type: string
+      default: ''
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured individually for each job.
+permissions: {}
+
+jobs:
+
+  create-pull-request:
+    name: Create Pull Request
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Retrieve patch artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: 'pr-artifacts-${{ inputs.workflow-id }}-patch'
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Retrieve commit message artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: 'pr-artifacts-${{ inputs.workflow-id }}-commit-message'
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Retrieve pull request body artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: 'pr-artifacts-${{ inputs.workflow-id }}-pr-body'
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: true
+
+      # When the specified HEAD branch already exists, the workflow should fail and require manual inspection.
+      - name: Check if branch already exists remotely
+        env:
+          PR_HEAD_BRANCH: ${{ inputs.head-branch }}
+        run: |
+          if git ls-remote --exit-code --heads origin "$PR_HEAD_BRANCH"; then
+            echo "::error::Branch '$PR_HEAD_BRANCH' already exists. Please inspect, delete, and try again."
+            exit 1
+          fi
+
+      - name: Create the HEAD branch
+        env:
+          PR_HEAD_BRANCH: ${{ inputs.head-branch }}
+          PR_BASE_BRANCH: ${{ inputs.base-branch }}
+        run: git checkout -b "$PR_HEAD_BRANCH" "origin/$PR_BASE_BRANCH"
+
+      - name: Configure the Git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Apply the patch
+        run: git apply "$RUNNER_TEMP/artifacts/patch.diff"
+
+      - name: Stage changes
+        run: git add -A
+
+      - name: Commit changes
+        run: git commit -F "$RUNNER_TEMP/artifacts/commit-message.md"
+
+      - name: Push changes
+        run: git push origin "$PR_BRANCH_NAME"
+
+      - name: Create Pull Request
+        if: false
+        env:
+          PR_BASE_BRANCH: ${{ inputs.base-branch }}
+          PR_HEAD_BRANCH: ${{ inputs.head-branch }}
+          PR_TITLE: ${{ inputs.pr-title }}
+        run: |
+          gh pr create \
+            --base "$PR_BASE_BRANCH" \
+            --head "$PR_HEAD_BRANCH" \
+            --title "$PR_TITLE" \
+            --body-file ${RUNNER_TEMP}/artifacts/pr-body.md
+
+      - name: Add labels to the pull request
+        if: ${{ inputs.pr-labels != '' }}
+        env:
+          PR_LABELS: ${{ inputs.pr-labels }}
+        run: gh pr edit --add-label "$PR_LABELS"
