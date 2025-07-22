@@ -26,7 +26,7 @@ on:
       node-version:
         description: The version of Node.js to be used.
         type: string
-        default: '20'
+        default: '20.x'
       level:
         description: The level of release to be used (patch, minor, major).
         type: string

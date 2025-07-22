@@ -24,7 +24,7 @@ on:
       node-version:
         description: The version of Node.js to be used.
         type: string
-        default: '20'
+        default: '20.x'
       json-file:
         description: The JSON file containing the version number to update (package.json).
         type: string

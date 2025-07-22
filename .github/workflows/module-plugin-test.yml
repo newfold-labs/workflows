@@ -9,7 +9,7 @@ on:
       node-version:
         description: The version of Node.js to be used
         type: string
-        default: '20'
+        default: '20.x'
       plugin-repo:
         description: The plugin repo
         type: string
