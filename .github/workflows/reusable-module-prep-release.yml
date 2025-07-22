@@ -21,6 +21,10 @@ on:
         description: The level of release to be used (patch, minor, major).
         type: string
         required: true
+      node-version:
+        description: The version of Node.js to be used.
+        type: string
+        default: '20'
       json-file:
         description: The JSON file containing the version number to update (package.json).
         type: string
@@ -72,7 +76,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
-          node-version: 20.x
+          node-version: '${{ inputs.node-version }}'
           cache: 'npm'
 
       - name: Show environment tooling versions
