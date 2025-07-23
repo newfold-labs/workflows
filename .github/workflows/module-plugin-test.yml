@@ -7,9 +7,9 @@ on:
         type: string
         default: '8.1'
       node-version:
-        description: The version of node to be used
+        description: The version of Node.js to be used
         type: string
-        default: '20.x'
+        default: '20'
       plugin-repo:
         description: The plugin repo
         type: string
@@ -65,7 +65,7 @@ on:
       node-version:
         description: The version of node to be used
         type: string
-        default: '20.x'
+        default: '20'
       plugin-repo:
         description: The plugin repo
         type: string
