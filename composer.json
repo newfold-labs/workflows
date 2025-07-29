@@ -18,7 +18,7 @@
     }
   },
   "scripts": {
-    "i18n-pot": "vendor/bin/wp i18n make-pot . ./languages/newfold-labs-workflows.pot --headers='{\"Report-Msgid-Bugs-To\":\"https://github.com/newfold-labs/workflows/issues\",\"POT-Creation-Date\":\"2023-03-08T20:13:41+00:00\"}'",
+    "i18n-pot": "vendor/bin/wp i18n make-pot . ./languages/newfold-labs-workflows.pot --domain=newfold-labs-workflows --headers='{\"Report-Msgid-Bugs-To\":\"https://github.com/newfold-labs/workflows/issues\",\"POT-Creation-Date\":\"2023-03-08T20:13:41+00:00\"}'",
     "i18n-po": "vendor/bin/wp i18n update-po ./languages/newfold-labs-workflows.pot ./languages",
     "i18n-mo": "vendor/bin/wp i18n make-mo ./languages",
     "i18n-php": "vendor/bin/wp i18n make-php ./languages",
