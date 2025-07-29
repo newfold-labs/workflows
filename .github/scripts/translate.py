@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 
 TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
+RETRY_ATTEMPTS = os.getenv("RETRY_ATTEMPTS")
+
 session = requests.Session()
 
 def extract_lang_from_filename(filename):
@@ -25,7 +27,7 @@ def batch_translate(texts, to_lang, session):
     }
     payload = [{"Text": text} for text in texts]
 
-    max_retries = 5
+    max_retries = RETRY_ATTEMPTS
     for attempt in range(1, max_retries + 1):
         try:
             response = session.post(url, headers=headers, json=payload)
