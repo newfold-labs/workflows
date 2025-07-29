@@ -37,7 +37,7 @@ on:
 permissions: {}
 
 env:
-  PR_BRANCH_NAME: 'auto-translate/${{ github.ref_name }}'
+  PR_BRANCH_NAME: ${{ format( 'auto-translate/{0}', ( github.event_name == 'pull_request' && github.head_ref || github.ref_name ) ) }}
 
 jobs:
   # This job works to ensure that the HEAD branch is present and up to date with the BASE branch.
