@@ -49,7 +49,6 @@ def batch_translate(texts, to_lang, session):
                 print(f"[{to_lang}] Unexpected error response: {response.text}")
                 break
         print(f"API request failed for lang {to_lang}:", str(e))
-        break
     return None
 
 def compose_msg_with_context(msgid, context):
