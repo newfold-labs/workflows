@@ -4,6 +4,7 @@ import re
 import requests
 import polib
 import time
+
 from pathlib import Path
 
 TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
