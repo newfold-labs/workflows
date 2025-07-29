@@ -30,6 +30,5 @@ jobs:
     uses: ./.github/workflows/reusable-translations.yml
     with:
       text_domain: 'newfold-labs-workflows'
-      create_pull_request: false
     secrets:
       TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}

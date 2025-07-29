@@ -27,10 +27,6 @@ on:
         required: false
         type: string
         default: 'composer'
-      create_pull_request:
-        description: 'Whether to create a pull request for translation updates'
-        type: boolean
-        default: true
 
     secrets:
       TRANSLATOR_API_KEY:
@@ -352,7 +348,6 @@ jobs:
   create-translation-pr:
     name: Create a Pull Request for Translation Updates
     runs-on: ubuntu-latest
-    if: ${{ inputs.create_pull_request }}
     needs: [ 'prepare-pr-branch', 'prepare-for-translation', 'auto-translate-with-azure', 'process-translations' ]
     permissions:
       contents: write
