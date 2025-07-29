@@ -29,8 +29,7 @@ on:
         default: 'composer'
       retry-attempts:
         description: 'Number of retry attempts for the Azure AI translation step'
-        required: false
-        type: integer
+        type: number
         default: 5
 
     secrets:
