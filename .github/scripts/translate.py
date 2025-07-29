@@ -3,7 +3,6 @@ import json
 import re
 import requests
 import polib
-import time
 from pathlib import Path
 
 TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
@@ -23,34 +22,13 @@ def batch_translate(texts, to_lang, session):
         "Content-Type": "application/json"
     }
     payload = [{"Text": text} for text in texts]
-
-    max_retries = 5
-    for attempt in range(1, max_retries + 1):
-        try:
-            response = session.post(url, headers=headers, json=payload)
-            response.raise_for_status()
-            return [item["translations"][0]["text"] for item in response.json()]
-        except requests.exceptions.HTTPError as e:
-            try:
-                error_data = response.json().get("error", {})
-                error_code = str(error_data.get("code", ""))
-                error_message = error_data.get("message", "")
-
-                if error_code.startswith("429"):
-                    wait_time = 2 ** attempt
-
-                    print(f"[{to_lang}] Rate limit hit (attempt {attempt}/{max_retries}): {error_message}. Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    print(f"[{to_lang}] API error: {error_code} — {error_message}")
-                    break
-            except (ValueError, KeyError, json.JSONDecodeError):
-                print(f"[{to_lang}] Unexpected error response: {response.text}")
-                break
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        return [item["translations"][0]["text"] for item in response.json()]
+    except requests.exceptions.RequestException as e:
         print(f"API request failed for lang {to_lang}:", str(e))
-        break
-    return None
+        return None
 
 def compose_msg_with_context(msgid, context):
     return f"{msgid} ({context})" if context else msgid
