@@ -49,7 +49,7 @@ def translate_entries(entries, get_id_context, apply_translation, lang, session)
     if not texts:
         return
 
-    translated_texts = batch_translate(texts, lang)
+    translated_texts = batch_translate(texts, lang, session)
     if not translated_texts:
         return
 
