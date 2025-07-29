@@ -30,7 +30,7 @@ def batch_translate(texts, to_lang, session):
             response = session.post(url, headers=headers, json=payload)
             response.raise_for_status()
             return [item["translations"][0]["text"] for item in response.json()]
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.HTTPError:
             status_code = response.status_code
 
             try:
