@@ -27,7 +27,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: ./.github/workflows/reusable-translations.yml@main
+    uses: ./.github/workflows/reusable-translations.yml
     with:
       text_domain: 'newfold-labs-workflows'
       create_pull_request: false
