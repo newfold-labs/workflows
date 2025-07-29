@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
-RETRY_ATTEMPTS = os.getenv("RETRY_ATTEMPTS")
+RETRY_ATTEMPTS = int(os.getenv("RETRY_ATTEMPTS", 5))
 
 session = requests.Session()
 
