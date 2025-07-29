@@ -39,7 +39,7 @@ def batch_translate(texts, to_lang, session):
             except (ValueError, KeyError, json.JSONDecodeError):
                 error_message = "Unable to parse error message"
 
-            if status_code == 429
+            if status_code == 429:
                 wait_time = 2 ** attempt
 
                 print(f"[{to_lang}] Rate limit hit (attempt {attempt}/{max_retries}): {error_message}. Retrying in {wait_time} seconds...")
