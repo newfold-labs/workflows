@@ -352,7 +352,7 @@ jobs:
   create-translation-pr:
     name: Create a Pull Request for Translation Updates
     runs-on: ubuntu-latest
-    if: ${{ input.create-pull-request }}
+    if: ${{ inputs.create-pull-request }}
     needs: [ 'prepare-pr-branch', 'prepare-for-translation', 'auto-translate-with-azure', 'process-translations' ]
     permissions:
       contents: write
