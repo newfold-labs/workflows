@@ -36,8 +36,10 @@ def batch_translate(texts, to_lang, session):
             try:
                 error_data = response.json().get("error", {})
                 error_message = error_data.get("message", "")
+                error_code = error_data.get("code", "")
             except (ValueError, KeyError, json.JSONDecodeError):
                 error_message = "Unable to parse error message"
+                error_code = status_code
 
             if status_code == 429:
                 wait_time = 2 ** attempt
