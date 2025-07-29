@@ -32,11 +32,12 @@ def batch_translate(texts, to_lang, session):
             return [item["translations"][0]["text"] for item in response.json()]
         except requests.exceptions.HTTPError as e:
             try:
+                status_code = response.status_code
                 error_data = response.json().get("error", {})
                 error_code = str(error_data.get("code", ""))
                 error_message = error_data.get("message", "")
 
-                if error_code.startswith("429"):
+                if status_code == 429
                     wait_time = 2 ** attempt
 
                     print(f"[{to_lang}] Rate limit hit (attempt {attempt}/{max_retries}): {error_message}. Retrying in {wait_time} seconds...")
@@ -46,9 +47,10 @@ def batch_translate(texts, to_lang, session):
                     print(f"[{to_lang}] API error: {error_code} — {error_message}")
                     break
             except (ValueError, KeyError, json.JSONDecodeError):
-                print(f"[{to_lang}] Unexpected error response: {response.text}")
+                print(f"API request failed for lang {to_lang}:", str(e))
                 break
-        print(f"API request failed for lang {to_lang}:", str(e))
+
+            print(f"API request failed for lang {to_lang}:", str(e))
     return None
 
 def compose_msg_with_context(msgid, context):
