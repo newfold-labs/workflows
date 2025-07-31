@@ -95,8 +95,6 @@ class TestComposeMsgWithContext:
 class TestStripContextFromTranslation:
     """Test context stripping from translations."""
 
-    import pytest
-
     @pytest.mark.parametrize(
         "input_text,expected",
         [
