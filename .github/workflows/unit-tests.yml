@@ -4,8 +4,8 @@ name: Unit Tests
 on:
   push:
     branches:
-        - main
-        - develop
+      - main
+      - develop
     paths:
       - '**translations.yml'
       - '.python-version'
