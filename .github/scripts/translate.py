@@ -6,6 +6,7 @@ import polib
 from pathlib import Path
 
 TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
+session = requests.Session()
 
 def extract_lang_from_filename(filename):
     pattern = fr'{re.escape(TEXT_DOMAIN)}-([a-z]{{2,3}}(?:_[A-Z]{{2}})?)'
@@ -14,7 +15,7 @@ def extract_lang_from_filename(filename):
         return match.group(1).replace('_', '-')
     return None
 
-def batch_translate(texts, to_lang):
+def batch_translate(texts, to_lang, session):
     url = f"https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=en&to={to_lang}"
     headers = {
         "Ocp-Apim-Subscription-Key": os.environ["TRANSLATOR_API_KEY"],
@@ -35,7 +36,7 @@ def compose_msg_with_context(msgid, context):
 def strip_context_from_translation(text):
     return re.sub(r'\s*\([^()]*\)$', '', text).strip()
 
-def translate_entries(entries, get_id_context, apply_translation, lang):
+def translate_entries(entries, get_id_context, apply_translation, lang, session):
     texts = []
     metadata = []
 
@@ -48,7 +49,7 @@ def translate_entries(entries, get_id_context, apply_translation, lang):
     if not texts:
         return
 
-    translated_texts = batch_translate(texts, lang)
+    translated_texts = batch_translate(texts, lang, session)
     if not translated_texts:
         return
 
@@ -73,7 +74,7 @@ for path in Path('languages').rglob('*.po'):
     def apply_po_translation(entry, translated):
         entry.msgstr = translated
 
-    translate_entries(entries_to_translate, get_po_id_context, apply_po_translation, lang)
+    translate_entries(entries_to_translate, get_po_id_context, apply_po_translation, lang, session)
     po.save()
 
 # Translate .json files
@@ -117,7 +118,7 @@ for path in Path('languages').rglob('*.json'):
     if not keys_to_translate:
         continue
 
-    translated_texts = batch_translate(keys_to_translate, lang)
+    translated_texts = batch_translate(keys_to_translate, lang, session)
     if not translated_texts:
         continue
 
