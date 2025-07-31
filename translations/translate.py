@@ -5,9 +5,9 @@ import requests
 import polib
 from pathlib import Path
 
-TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
-
 def extract_lang_from_filename(filename):
+    TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
+
     pattern = fr'{re.escape(TEXT_DOMAIN)}-([a-z]{{2,3}}(?:_[A-Z]{{2}})?)'
     match = re.search(pattern, filename)
     if match:
@@ -33,7 +33,7 @@ def compose_msg_with_context(msgid, context):
     return f"{msgid} ({context})" if context else msgid
 
 def strip_context_from_translation(text):
-    return re.sub(r'\s*\([^()]*\)$', '', text).strip()
+    return re.sub(r'\([^()]*\)\s*$', '', text).strip()
 
 def translate_entries(entries, get_id_context, apply_translation, lang):
     texts = []

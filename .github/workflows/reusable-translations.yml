@@ -219,7 +219,7 @@ jobs:
         run: pip install requests polib
 
       - name: Download translation scripts from workflow repository
-        run: curl -o "$RUNNER_TEMP/translate.py" https://raw.githubusercontent.com/newfold-labs/workflows/refs/heads/main/.github/scripts/translate.py
+        run: curl -o "$RUNNER_TEMP/translate.py" https://raw.githubusercontent.com/newfold-labs/workflows/refs/heads/add/translation-unit-tests/translations/translate.py
 
       - name: Translate PO and JSON files
         env:
