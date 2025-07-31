@@ -165,10 +165,22 @@ class TestBatchTranslate:
         # Confirm only one request.
         mock_post.assert_called_once()
 
-        # Verify the request parameters.
+        # Extract call args
         call_args = mock_post.call_args
-        assert "api-version=3.0&from=en&to=es" in call_args[1]['headers']['Ocp-Apim-Subscription-Key'] or True
-        assert call_args[1]['json'] == [{"Text": "Hello"}, {"Text": "Goodbye"}]
+        called_url = call_args[0][0]
+        called_headers = call_args[1]['headers']
+        called_json = call_args[1]['json']
+
+        # Check URL query parameters
+        assert "api-version=3.0" in called_url
+        assert "from=en" in called_url
+        assert "to=es" in called_url
+
+        # Check headers
+        assert called_headers['Ocp-Apim-Subscription-Key'] == "test-key"
+
+        # Check body
+        assert called_json == [{"Text": "Hello"}, {"Text": "Goodbye"}]
 
     @patch('requests.post')
     def test_batch_translate_api_error(self, mock_post, capsys):
