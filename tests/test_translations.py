@@ -224,5 +224,67 @@ class TestBatchTranslate:
         captured = capsys.readouterr()
         assert "API request failed for lang es: 401 Client Error: Unauthorized" in captured.out or "API Error" in captured.err
 
+    def test_translate_entries_with_real_helpers(self):
+        """Test translate_entries function with mocked batch_translate."""
+
+        class SampleEntry:
+            def __init__(self, msgid, tcomment=None, msgstr="", msgctxt=None):
+                self.msgid = msgid
+                self.msgstr = msgstr
+                self.tcomment = tcomment
+                self.msgctxt = msgctxt
+
+        # Create all entries at once
+        entries = [
+            SampleEntry("Hello", tcomment="admin", msgctxt="admin"),                      # Index 0: Will be processed
+            SampleEntry("Goodbye", tcomment=None, msgctxt=None),                         # Index 1: Will be processed
+            SampleEntry("", tcomment="empty-msgid", msgctxt="empty-msgid"),              # Index 2: Will be SKIPPED (empty msgid)
+            SampleEntry("Special ©✓", tcomment="unicode", msgctxt="unicode"),            # Index 3: Will be processed
+            SampleEntry("Duplicate", tcomment="dup", msgctxt="dup"),                     # Index 4: Will be processed
+            SampleEntry("Duplicate", tcomment="dup", msgctxt="dup"),                     # Index 5: Will be processed
+            SampleEntry("Has msgstr", tcomment="context", msgstr="Already translated", msgctxt="context"),  # Index 6: Will be SKIPPED (has msgstr)
+            SampleEntry("Context|Separator", tcomment="with|sep", msgctxt="with|sep"),   # Index 7: Will be processed
+            SampleEntry("None tcomment", tcomment=None, msgctxt=None),                   # Index 8: Will be processed
+        ]
+
+        # Mock translations for the entries that will actually be processed
+        # Order: Hello(0), Goodbye(1), Special(3), Duplicate(4), Duplicate(5), Context|Separator(7), None tcomment(8)
+        mock_translations = [
+            "Hola (admin)",                    # For "Hello" (index 0)
+            "Adiós",                          # For "Goodbye" (index 1)
+            "Especial ©✓ (unicode)",          # For "Special ©✓" (index 3)
+            "Duplicado (dup)",                # For "Duplicate" (index 4)
+            "Duplicado (dup)",                # For "Duplicate" (index 5)
+            "Contexto|Separador (with|sep)",  # For "Context|Separator" (index 7)
+            "Ninguno",                        # For "None tcomment" (index 8)
+        ]
+
+        # Define helper functions that match your actual script
+        def get_po_id_context(entry):
+            return entry.msgid, entry.msgctxt
+
+        def apply_po_translation(entry, translated):
+            entry.msgstr = translated
+
+        # Use patch.object to mock batch_translate
+        with patch.object(translate_module, 'batch_translate', return_value=mock_translations):
+            translate_entries(entries, get_po_id_context, apply_po_translation, "es")
+
+        # Check all results at once
+        expected_results = [
+            "Hola",                    # Index 0: Context stripped from "Hola (admin)"
+            "Adiós",                   # Index 1: No context to strip
+            "",                        # Index 2: Empty msgid, should remain empty
+            "Especial ©✓",             # Index 3: Context stripped from "Especial ©✓ (unicode)"
+            "Duplicado",               # Index 4: Context stripped from "Duplicado (dup)"
+            "Duplicado",               # Index 5: Context stripped from "Duplicado (dup)"
+            "Already translated",      # Index 6: Had msgstr, should remain unchanged
+            "Contexto|Separador",      # Index 7: Context stripped from "Contexto|Separador (with|sep)"
+            "Ninguno",                 # Index 8: No context to strip
+        ]
+
+        actual_results = [entry.msgstr for entry in entries]
+        assert actual_results == expected_results
+
 if __name__ == "__main__":
     pytest.main([__file__])
