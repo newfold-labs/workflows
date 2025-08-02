@@ -37,7 +37,7 @@ on:
 permissions: {}
 
 env:
-  PR_BRANCH_NAME: 'auto-translate/${{ github.ref_name }}'
+  PR_BRANCH_NAME: ${{ format( 'auto-translate/{0}', ( github.event_name == 'pull_request' && github.head_ref || github.ref_name ) ) }}
 
 jobs:
   # This job works to ensure that the HEAD branch is present and up to date with the BASE branch.
@@ -67,8 +67,9 @@ jobs:
         id: check_pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF_NAME: ${{ 'pull_request' == github.event_name && github.head_ref || github.ref_name }}
         run: |
-          pr=$(gh pr list --state open --label 'translations' --base "$GITHUB_REF_NAME" --head "$PR_BRANCH_NAME" --json number --jq '.[0].number')
+          pr=$(gh pr list --state open --label 'translations' --base "$REF_NAME" --head "$PR_BRANCH_NAME" --json number --jq '.[0].number')
           if [ -n "$pr" ]; then
             echo "found=$pr" >> "$GITHUB_OUTPUT"
           else
@@ -91,7 +92,8 @@ jobs:
         if: steps.check_pr.outputs.found != 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr update-branch --yes || echo "::notice::No new changes in $GITHUB_REF_NAME."
+          REF_NAME: ${{ 'pull_request' == github.event_name && github.head_ref || github.ref_name }}
+        run: gh pr update-branch --yes || echo "::notice::No new changes in $REF_NAME."
 
       - name: Delete an orphaned branch with no pull request
         if: steps.check_pr.outputs.found == 'false' && steps.branch-check.outputs.exists == 'true'
@@ -402,6 +404,7 @@ jobs:
         if: needs.prepare-pr-branch.outputs.pr_found == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF_NAME: ${{ 'pull_request' == github.event_name && github.head_ref || github.ref_name }}
         run: |
           PR_BODY="$({
             echo "This pull request contains automatic translations of PO and JSON files."
@@ -412,7 +415,7 @@ jobs:
           PR_URL=$(gh pr create \
             --title "Updating translation files" \
             --body "$PR_BODY" \
-            --base "$GITHUB_REF_NAME" \
+            --base "$REF_NAME" \
             --head "$PR_BRANCH_NAME" \
             --label "translations")
 
