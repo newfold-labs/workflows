@@ -9,7 +9,7 @@ on:
       node-version:
         description: The version of Node.js to be used
         type: string
-        default: '20'
+        default: '22'
       plugin-repo:
         description: The plugin repo
         type: string
@@ -65,7 +65,7 @@ on:
       node-version:
         description: The version of node to be used
         type: string
-        default: '20'
+        default: '22'
       plugin-repo:
         description: The plugin repo
         type: string
@@ -98,7 +98,7 @@ jobs:
     steps:
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@0f7f1d08e3e32076e51cae65eb0b0c871405b16e # v2.34.1
+        uses: shivammathur/setup-php@ccf2c627fe61b1b4d924adfcbd19d661a18133a0 # v2.35.2
         with:
           php-version: ${{ inputs.php-version }}
           coverage: none
