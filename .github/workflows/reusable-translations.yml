@@ -27,6 +27,10 @@ on:
         required: false
         type: string
         default: 'composer'
+      retry-attempts:
+        description: 'Number of retry attempts for the Azure AI translation step'
+        type: number
+        default: 5
 
     secrets:
       TRANSLATOR_API_KEY:
@@ -227,6 +231,7 @@ jobs:
         env:
           TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
           TEXT_DOMAIN: ${{ inputs.text_domain }}
+          RETRY_ATTEMPTS: ${{ inputs.retry-attempts }}
         run: python "$RUNNER_TEMP/translate.py"
 
       - name: Remove downloaded translate script
