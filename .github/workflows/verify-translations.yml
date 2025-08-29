@@ -1,0 +1,36 @@
+# Verifies changes to the reusable Translations workflow.
+name: Verify Translations
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - '**translations.yml'
+      - '.github/scripts/translate.py'
+  pull_request:
+    types: [ opened, edited, synchronize, reopened, ready_for_review ]
+    paths:
+      - '**translations.yml'
+      - '.github/scripts/translate.py'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  cancel-in-progress: true
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured individually for each job.
+permissions: {}
+
+jobs:
+  translate:
+    name: 'Check and update translations'
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/reusable-translations.yml
+    with:
+      text_domain: 'newfold-labs-workflows'
+    secrets:
+      TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
