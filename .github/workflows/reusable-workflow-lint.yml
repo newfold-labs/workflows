@@ -103,7 +103,7 @@ jobs:
           disable_rules: 'dangerous-write,shellcheck,credentials,local-action'
 
       - name: Upload SARIF file to GitHub
-        uses: github/codeql-action/upload-sarif@1b549b9259bda1cb5ddde3b41741a82a2d15a841 # v3.28.13
+        uses: github/codeql-action/upload-sarif@d3678e237b9c32a6c9bffb3315c335f976f3549f # v3.29.5
         with:
           sarif_file: "${{steps.octoscan.outputs.sarif_output}}"
           category: octoscan
@@ -133,22 +133,20 @@ jobs:
         uses: boostsecurityio/poutine-action@84c0a0d32e8d57ae12651222be1eb15351429228 # v0.15.2
 
       - name: Upload poutine SARIF file
-        uses: github/codeql-action/upload-sarif@1b549b9259bda1cb5ddde3b41741a82a2d15a841 # v3.28.13
+        uses: github/codeql-action/upload-sarif@d3678e237b9c32a6c9bffb3315c335f976f3549f # v3.29.5
         with:
           sarif_file: results.sarif
           category: poutine
 
-  # Performs a scan of GitHub Action workflow files using Zizmor.
+  # Performs a scan of GitHub Action workflow files using zizmor.
   #
-  # Zizmor is a static analysis tool for GitHub Actions that can find many common security issues in typical setups.
+  # zizmor is a static analysis tool for GitHub Actions that can find many common security issues in typical setups.
   #
   # Performs the following steps:
   # - Checks out the repository.
-  # - Installs uv.
-  # - Runs Zizmor.
-  # - Uploads a SARIF file to GitHub.
+  # - Runs the zizmor action that scans workflow files and uploads a SARIF file to GitHub.
   zizmor:
-    name: Zizmor
+    name: zizmor
     runs-on: ubuntu-24.04
     permissions:
       security-events: write
@@ -161,16 +159,5 @@ jobs:
           persist-credentials: false
           show-progress: ${{ runner.debug == '1' && 'true' || 'false' }}
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182 # v5.4.1
-
       - name: Run zizmor
-        run: uvx zizmor@1.5.2 --format sarif . > results.sarif
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@1b549b9259bda1cb5ddde3b41741a82a2d15a841 # v3.28.13
-        with:
-          sarif_file: results.sarif
-          category: zizmor
+        uses: zizmorcore/zizmor-action@5ca5fc7a4779c5263a3ffa0e1f693009994446d1 # v0.1.2

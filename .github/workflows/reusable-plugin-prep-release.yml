@@ -23,6 +23,10 @@ on:
         type: string
         default: 'develop'
         required: false
+      node-version:
+        description: The version of Node.js to be used.
+        type: string
+        default: '20'
       level:
         description: The level of release to be used (patch, minor, major).
         type: string
@@ -75,7 +79,7 @@ jobs:
           fetch-tags: true
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@cf4cade2721270509d5b1c766ab3549210a39a2a  # v2.33.0
+        uses: shivammathur/setup-php@ccf2c627fe61b1b4d924adfcbd19d661a18133a0  # v2.35.2
         with:
           php-version: '8.1'
           coverage: none
@@ -84,7 +88,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
-          node-version: 20.x
+          node-version: '${{ inputs.node-version }}'
           cache: 'npm'
 
       - name: Show environment tooling versions
@@ -98,7 +102,7 @@ jobs:
         run: composer validate
 
       - name: Install PHP Dependencies
-        uses: ramsey/composer-install@a2636af0004d1c0499ffca16ac0b4cc94df70565 # v3.1.0
+        uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
         with:
           composer-options: "--optimize-autoloader --verbose"
 
@@ -276,7 +280,8 @@ jobs:
             --title "Automated ${RELEASE_LEVEL} release: ${NEW_VERSION}" \
             --body "$PR_BODY" \
             --base "${PLUGIN_TARGET_BRANCH}" \
-            --head "$RELEASE_BRANCH" )
+            --head "$RELEASE_BRANCH" \
+            --draft )
 
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
 

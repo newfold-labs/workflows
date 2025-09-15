@@ -7,9 +7,9 @@ on:
         type: string
         default: '8.1'
       node-version:
-        description: The version of node to be used
+        description: The version of Node.js to be used
         type: string
-        default: '20.x'
+        default: '22'
       plugin-repo:
         description: The plugin repo
         type: string
@@ -65,7 +65,7 @@ on:
       node-version:
         description: The version of node to be used
         type: string
-        default: '20.x'
+        default: '22'
       plugin-repo:
         description: The plugin repo
         type: string
@@ -98,7 +98,7 @@ jobs:
     steps:
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@9e72090525849c5e82e596468b86eb55e9cc5401 # v2.32.0
+        uses: shivammathur/setup-php@ccf2c627fe61b1b4d924adfcbd19d661a18133a0 # v2.35.2
         with:
           php-version: ${{ inputs.php-version }}
           coverage: none
@@ -114,7 +114,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
@@ -124,7 +124,7 @@ jobs:
         run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer vendor directory
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
