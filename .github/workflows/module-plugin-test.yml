@@ -278,12 +278,17 @@ jobs:
         if: ${{ ! inputs.only-module-tests }}
         run: npm run test:e2e -- --browser chrome --spec "tests/cypress/integration/**/*.cy.js,vendor/!(${MODULE_REPO}/tests/cypress/integration/*.cy.js),vendor/!(${MODULE_REPO}/tests/cypress/integration/**/*.cy.js)"
 
-      - name: Store screenshots of test failures
+      - name: Store screenshots, videos, and logs of test failures
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          path: ./tests/cypress/screenshots
-          name: ${{ inputs.artifact-name != '' && inputs.artifact-name || steps.workflow.outputs.PACKAGE }}-screenshots
+          path: |
+            ./tests/cypress/screenshots
+            ./tests/cypress/videos
+            ./tests/cypress/results
+            ./tests/cypress/downloads
+            ./tests/cypress/logs
+          name: ${{ inputs.artifact-name != '' && inputs.artifact-name || steps.workflow.outputs.PACKAGE }}-cypress-artifacts
 
       - name: Output debug.log file contents
         if: always()
