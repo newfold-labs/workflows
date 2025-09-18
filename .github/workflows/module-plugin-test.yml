@@ -98,7 +98,7 @@ jobs:
     steps:
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@ccf2c627fe61b1b4d924adfcbd19d661a18133a0 # v2.35.2
+        uses: shivammathur/setup-php@ec406be512d7077f68eed36e63f4d91bc006edc4 # v2.35.4
         with:
           php-version: ${{ inputs.php-version }}
           coverage: none
@@ -107,7 +107,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Checkout plugin
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           repository: ${{ inputs.plugin-repo }}
           ref: ${{ inputs.plugin-branch }}
@@ -124,7 +124,7 @@ jobs:
         run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer vendor directory
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
@@ -278,12 +278,17 @@ jobs:
         if: ${{ ! inputs.only-module-tests }}
         run: npm run test:e2e -- --browser chrome --spec "tests/cypress/integration/**/*.cy.js,vendor/!(${MODULE_REPO}/tests/cypress/integration/*.cy.js),vendor/!(${MODULE_REPO}/tests/cypress/integration/**/*.cy.js)"
 
-      - name: Store screenshots of test failures
+      - name: Store screenshots, videos, and logs of test failures
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          path: ./tests/cypress/screenshots
-          name: ${{ inputs.artifact-name != '' && inputs.artifact-name || steps.workflow.outputs.PACKAGE }}-screenshots
+          path: |
+            ./tests/cypress/screenshots
+            ./tests/cypress/videos
+            ./tests/cypress/results
+            ./tests/cypress/downloads
+            ./tests/cypress/logs
+          name: ${{ inputs.artifact-name != '' && inputs.artifact-name || steps.workflow.outputs.PACKAGE }}-cypress-artifacts
 
       - name: Output debug.log file contents
         if: always()
