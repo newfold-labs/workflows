@@ -232,7 +232,7 @@ class TestBatchTranslate:
 
         # Confirm error message was output.
         captured = capsys.readouterr()
-        assert "API request failed for lang es: 401 Client Error: Unauthorized" in captured.out or "API Error" in captured.err
+        assert "API request failed for lang es: 401 Client Error: Unauthorized" in captured.out
 
     def test_translate_entries_with_real_helpers(self):
         """Test translate_entries function with mocked batch_translate."""
