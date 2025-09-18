@@ -5,9 +5,9 @@ import requests
 import polib
 from pathlib import Path
 
-def extract_lang_from_filename(filename):
-    TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
+TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
 
+def extract_lang_from_filename(filename):
     pattern = fr'{re.escape(TEXT_DOMAIN)}-([a-z]{{2,3}}(?:_[A-Z]{{2}})?)'
     match = re.search(pattern, filename)
     if match:
