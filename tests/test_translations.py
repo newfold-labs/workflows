@@ -138,13 +138,9 @@ class TestSplitContextKey:
 class TestBatchTranslate:
     """Test batch translation functionality."""
 
-    TRANSLATOR_API_KEY = os.environ["TRANSLATOR_API_KEY"]
-
     @pytest.fixture(autouse=True)
     def setup_api_key(self):
         """Set up API key environment variable."""
-        with patch.dict(os.environ, {'TRANSLATOR_API_KEY': 'test-key'}):
-            yield
 
     @patch('requests.post')
     def test_batch_translate_success(self, mock_post):
@@ -177,7 +173,7 @@ class TestBatchTranslate:
         assert "to=es" in called_url
 
         # Check headers
-        assert called_headers['Ocp-Apim-Subscription-Key'] == "test-key"
+        assert called_headers['Ocp-Apim-Subscription-Key'] == "api-key-1234-secure"
 
         # Check body
         assert called_json == [{"Text": "Hello"}, {"Text": "Goodbye"}]
