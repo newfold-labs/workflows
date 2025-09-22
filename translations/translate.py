@@ -33,7 +33,7 @@ def compose_msg_with_context(msgid, context):
     return f"{msgid} ({context})" if context else msgid
 
 def strip_context_from_translation(text):
-    return re.sub(r'\s*\([^()]*\)$', '', text).strip()
+    return re.sub(r'\([^()]*\)\s*$', '', text).strip()
 
 def translate_entries(entries, get_id_context, apply_translation, lang):
     texts = []
