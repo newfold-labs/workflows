@@ -99,7 +99,7 @@ jobs:
         run: |
           cd "$DIST"
           zip -r "$PACKAGE.zip" .
-          echo "ZIP_PATH=$PACKAGE.zip" >> $GITHUB_OUTPUT
+          echo "ZIP_PATH=$PACKAGE.zip" >> "${GITHUB_OUTPUT}"
 
       - name: Calculate Zip Size
         id: zip_size
@@ -111,13 +111,15 @@ jobs:
           cd "$DIST"
           SIZE_HUMAN=$(du -sh "$ZIP_PATH" | cut -f1)
           SIZE_BYTES=$(du -sb "$ZIP_PATH" | cut -f1)
-          echo "::notice file=$ZIP_PATH::Zip file created with size: $SIZE_HUMAN ($SIZE_BYTES bytes)"
-          if [ $SIZE_BYTES -gt $(( ${{ env.MAX_ZIP_SIZE_MB }} * 1024 * 1024 )) ]; then
-            echo "::error file=$ZIP_PATH::Zip file size $SIZE_HUMAN exceeds the maximum allowed size of ${{ env.MAX_ZIP_SIZE_MB }} MB."
+          echo "::notice file=${ZIP_PATH}::Zip file created with size: ${SIZE_HUMAN} (${SIZE_BYTES} bytes)"
+          if [ "$SIZE_BYTES" -gt $(( ${{ env.MAX_ZIP_SIZE_MB }} * 1024 * 1024 )) ]; then
+            echo "::error file=${ZIP_PATH}::Zip file size ${SIZE_HUMAN} exceeds the maximum allowed size of ${{ env.MAX_ZIP_SIZE_MB }} MB."
             exit 1
           fi
-          echo "SIZE_HUMAN=$SIZE_HUMAN" >> $GITHUB_OUTPUT
-          echo "SIZE_BYTES=$SIZE_BYTES" >> $GITHUB_OUTPUT
+          {
+            echo "SIZE_HUMAN=${SIZE_HUMAN}"
+            echo "SIZE_BYTES=${SIZE_BYTES}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Retrieve Base Branch
         if: github.event_name == 'pull_request'
@@ -125,7 +127,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          echo "BASE_SHA=$BASE_SHA" >> $GITHUB_OUTPUT
+          echo "BASE_SHA=$BASE_SHA" >> "${GITHUB_OUTPUT}"
 
       - name: Clean Working Directory
         if: github.event_name == 'pull_request'
@@ -279,5 +281,5 @@ jobs:
           PERCENT_INCREASE: ${{ steps.compare_plugin_sizes.outputs.PERCENT_INCREASE }}
         if: github.event_name == 'pull_request' && steps.compare_plugin_sizes.outputs.FAILED == 'true'
         run: |
-          echo "::error::Plugin size increased by "$PERCENT_INCREASE"%, exceeding the "$MAX_SIZE_INCREASE_PERCENT"% limit."
+          echo "::error::Plugin size increased by ${PERCENT_INCREASE}%, exceeding the ${MAX_SIZE_INCREASE_PERCENT}% limit."
           exit 1
