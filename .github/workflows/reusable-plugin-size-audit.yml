@@ -104,20 +104,18 @@ jobs:
       - name: Calculate Zip Size
         id: zip_size
         env:
-          DIST: ${{ steps.workflow.outputs.DIST }}  
+          DIST: ${{ steps.workflow.outputs.DIST }} 
           PACKAGE: ${{ steps.workflow.outputs.PACKAGE }}
           ZIP_PATH: ${{ steps.create_zip.outputs.ZIP_PATH }}
         run: |
           cd "$DIST"
           SIZE_HUMAN=$(du -sh "$ZIP_PATH" | cut -f1)
           SIZE_BYTES=$(du -sb "$ZIP_PATH" | cut -f1)
-          
           echo "::notice file=$ZIP_PATH::Zip file created with size: $SIZE_HUMAN ($SIZE_BYTES bytes)"
           if [ $SIZE_BYTES -gt $(( ${{ env.MAX_ZIP_SIZE_MB }} * 1024 * 1024 )) ]; then
             echo "::error file=$ZIP_PATH::Zip file size $SIZE_HUMAN exceeds the maximum allowed size of ${{ env.MAX_ZIP_SIZE_MB }} MB."
             exit 1
           fi
-          
           echo "SIZE_HUMAN=$SIZE_HUMAN" >> $GITHUB_OUTPUT
           echo "SIZE_BYTES=$SIZE_BYTES" >> $GITHUB_OUTPUT
 
@@ -203,14 +201,12 @@ jobs:
           fi
           echo "Size Difference (Bytes): $SIZE_DIFF"
           echo "Percentage Increase: $PERCENT_INCREASE%"
-          
           if [ $PERCENT_INCREASE -gt $MAX_INCREASE_PERCENT ]; then
             echo "::error::Plugin size increased by $PERCENT_INCREASE%, which exceeds the maximum allowed increase of $MAX_INCREASE_PERCENT%."
             echo "FAILED=true" >> "${GITHUB_OUTPUT}"
           else
             echo "FAILED=false" >> "${GITHUB_OUTPUT}"
           fi
-          
           echo "PERCENT_INCREASE=${PERCENT_INCREASE}" >> "${GITHUB_OUTPUT}"
           echo "SIZE_DIFF=${SIZE_DIFF}" >> "${GITHUB_OUTPUT}"
 
@@ -278,7 +274,10 @@ jobs:
             }
 
       - name: Fail if size increase is too large
+        env:
+          MAX_SIZE_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
+          PERCENT_INCREASE: ${{ steps.compare_plugin_sizes.outputs.PERCENT_INCREASE }}
         if: github.event_name == 'pull_request' && steps.compare_plugin_sizes.outputs.FAILED == 'true'
         run: |
-          echo "::error::Plugin size increased by ${{ steps.compare_plugin_sizes.outputs.PERCENT_INCREASE }}%, exceeding the ${{ env.MAX_SIZE_INCREASE_PERCENT }}% limit."
+          echo "::error::Plugin size increased by "$PERCENT_INCREASE"%, exceeding the "$MAX_SIZE_INCREASE_PERCENT"% limit."
           exit 1
