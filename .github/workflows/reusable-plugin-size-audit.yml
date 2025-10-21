@@ -104,7 +104,7 @@ jobs:
       - name: Calculate Zip Size
         id: zip_size
         env:
-          DIST: ${{ steps.workflow.outputs.DIST }} 
+          DIST: ${{ steps.workflow.outputs.DIST }}
           PACKAGE: ${{ steps.workflow.outputs.PACKAGE }}
           ZIP_PATH: ${{ steps.create_zip.outputs.ZIP_PATH }}
         run: |
