@@ -103,7 +103,7 @@ jobs:
           disable_rules: 'dangerous-write,shellcheck,credentials,local-action'
 
       - name: Upload SARIF file to GitHub
-        uses: github/codeql-action/upload-sarif@192325c86100d080feab897ff886c34abd4c83a3 # v3.30.3
+        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
         with:
           sarif_file: "${{steps.octoscan.outputs.sarif_output}}"
           category: octoscan
@@ -133,7 +133,7 @@ jobs:
         uses: boostsecurityio/poutine-action@84c0a0d32e8d57ae12651222be1eb15351429228 # v0.15.2
 
       - name: Upload poutine SARIF file
-        uses: github/codeql-action/upload-sarif@192325c86100d080feab897ff886c34abd4c83a3 # v3.30.3
+        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
         with:
           sarif_file: results.sarif
           category: poutine
