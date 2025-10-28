@@ -74,7 +74,7 @@ jobs:
           - brand: 'bluehost'
             name: 'Bluehost'
             plugin-repo: 'newfold-labs/wp-plugin-bluehost'
-            module: 'hosting'
+            module: 'solutions'
             secondary-module-repo: 'installer'
             only-module-tests: true
           - brand: 'hostgator'
