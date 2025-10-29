@@ -263,6 +263,9 @@ jobs:
       - name: Install WordPress
         run: npx @wordpress/env@latest start --debug
 
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+
       - name: Check for module tests
         id: check-for-module-tests
         run:
