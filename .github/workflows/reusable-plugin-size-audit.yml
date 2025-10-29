@@ -3,10 +3,6 @@ name: Reusable Audit Plugin Size
 on:
   workflow_call:
     inputs:
-      plugin-repo:
-        description: The plugin repo (newfold-labs/wp-plugin-name).
-        type: string
-        required: true
       plugin-target-branch:
         description: The target (base) branch of the plugin. This is used as the target branch for the pull request.
         type: string
@@ -30,7 +26,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          repository: ${{ inputs.plugin-repo }}
           ref: ${{ inputs.plugin-source-branch }}
           persist-credentials: true
           fetch-depth: 0
@@ -54,21 +49,13 @@ jobs:
           echo "DIST=${PWD}/dist" >> "$GITHUB_OUTPUT"
           echo "PACKAGE=$PLUGIN_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Use Node.js 24.x
+      - name: Use Node from .nvmrc file
         uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
-          node-version: 24.x
-          cache: 'npm'
-
-      - name: Get Composer cache directory
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Composer vendor directory
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          node-version-file: .nvmrc
+          
+      - name: Install Composer Dependencies
+        uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
 
       - name: Show versions
         run: |
@@ -77,11 +64,11 @@ jobs:
           node --version
           npm --version
 
-      - name: Install PHP Dependencies
+      - name: Install PHP dependencies
         run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
 
-      - name: NPM Install
-        run: npm install --legacy-peer-deps
+      - name: Install npm dependencies
+        run: npm install
 
       - name: Build JavaScript
         run: npm run build
