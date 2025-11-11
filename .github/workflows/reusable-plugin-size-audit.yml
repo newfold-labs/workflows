@@ -56,6 +56,9 @@ jobs:
           node-version-file: .nvmrc
       - name: Install Composer Dependencies
         uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
+        with:
+          dependency-versions: 'locked'
+          composer-options: '--no-dev --optimize-autoloader --prefer-dist'
 
       - name: Show versions
         run: |
@@ -153,9 +156,11 @@ jobs:
           echo "DIST=${PWD}/dist_base" >> "$GITHUB_OUTPUT"
           echo "PACKAGE=$PLUGIN_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Install PHP Dependencies for Base Branch
-        if: github.event_name == 'pull_request'
-        run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
+      - name: Install PHP Dependencies for base branch
+        uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
+        with:
+          dependency-versions: 'locked'
+          composer-options: '--no-dev --optimize-autoloader --prefer-dist'
 
       - name: NPM Install for Base Branch
         if: github.event_name == 'pull_request'
@@ -221,7 +226,7 @@ jobs:
         run: |
           REPORT="final-report.md"
           {
-            echo "## Plugin Size Audit Report"
+            echo "## Plugin Size Audit: Folder and Zip Report"
             echo ""
             echo "### Total Plugin Size"
             echo "- **Current branch size:** ${TOTAL_SIZE_HUMAN}"
@@ -253,7 +258,7 @@ jobs:
 
             const existingComment = comments.data.find(comment =>
               comment.user.type === 'Bot' &&
-              comment.body.includes('## Plugin Size Audit Report')
+              comment.body.includes('## Plugin Size Audit: Folder and Zip Report')
             );
 
             if (existingComment) {
