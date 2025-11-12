@@ -4,11 +4,11 @@ name: Reusable Audit Plugin Size
 on:
   workflow_call:
     inputs:
-      plugin-target-branch:
+      base-branch:
         description: The target (base) branch of the plugin. This is used as the target branch for the pull request.
         type: string
         required: true
-      plugin-source-branch:
+      head-branch:
         description: The source (head) branch of the plugin. This is used as a starting point for the version changes. For a normal release it would be develop, but for a hotfix it would be the hotfixing branch.
         type: string
         required: true
@@ -27,7 +27,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          ref: ${{ inputs.plugin-source-branch }}
+          ref: ${{ inputs.head-branch }}
           persist-credentials: true
           fetch-depth: 0
           fetch-tags: true
@@ -125,7 +125,7 @@ jobs:
         if: github.event_name == 'pull_request'
         id: get_base_sha
         env:
-          BASE_SHA: ${{ inputs.plugin-target-branch }}
+          BASE_SHA: ${{ inputs.base-branch }}
         run: |
           echo "BASE_SHA=$BASE_SHA" >> "${GITHUB_OUTPUT}"
 
@@ -136,13 +136,16 @@ jobs:
           git clean -df
           echo "Working directory cleaned."
 
-      - name: Checkout base branch
+      - name: Checkout Repository for Base Branch
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ steps.get_base_sha.outputs.BASE_SHA }}
-        run: |
-          git checkout "$BASE_SHA"
-          echo "Checked out base branch at SHA: $BASE_SHA"
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ env.BASE_SHA }}
+          persist-credentials: true
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup workflow context for Base Branch
         if: github.event_name == 'pull_request'
