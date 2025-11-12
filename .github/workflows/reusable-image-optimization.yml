@@ -33,14 +33,14 @@ jobs:
           GITHUB_EVENT_NAME: ${{ inputs.trigger-event }}
         uses: calibreapp/image-actions@f32575787d333b0579f0b7d506ff03be63a669d1 # v1.4.1
         with:
-          GITHUB_TOKEN: ${{ github.token}}
+          GITHUB_TOKEN: ${{ github.token }}
           compressOnly: false
           jpegQuality: '82'
           pngQuality: '82'
           webpQuality: '86'
 
       - name: Create Pull Request
-        if: github.event_name == 'push' && steps.image_optimization.outputs.markdown != ''
+        if: inputs.trigger-event == 'push' && steps.image_optimization.outputs.markdown != ''
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
         with:
           token: ${{ github.token }}
