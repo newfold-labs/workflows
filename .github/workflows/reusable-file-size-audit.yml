@@ -313,19 +313,17 @@ jobs:
           fi
 
           # Only show largest files when relevant file types are modified
-          
           {
             echo
             echo "### Largest PHP Files"
-            find $DIST -name "*.php" -not -path "$DIST/vendor/*" -not -path "$DIST/base/*" -not -path "$DIST/node_modules/*" -not -path "$DIST/.git/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
+            find "$DIST" -name "*.php" -not -path "$DIST/vendor/*" -not -path "$DIST/base/*" -not -path "$DIST/node_modules/*" -not -path "$DIST/.git/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
             echo
             echo "### Largest Vendor Dependencies"
-            find $DIST/vendor -type f -name "*.js" -not -path "$DIST/base/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
+            find "$DIST/vendor" -type f -name "*.js" -not -path "$DIST/base/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
             echo
             echo "### Largest Files Overall"
-            find $DIST -type f -not -path "*/base/*" -not -path "*/\\.*" -not -path "*/node_modules/*" -not -path "*/vendor/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
+            find "$DIST" -type f -not -path "*/base/*" -not -path "*/\\.*" -not -path "*/node_modules/*" -not -path "*/vendor/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
           } >> "${REPORT}"
-        
 
       - name: Enforce thresholds
         if: github.event_name == 'pull_request'
