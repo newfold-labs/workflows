@@ -3,14 +3,18 @@ name: Reusable Plugin Size and Asset Audit
 on:
   workflow_call:
     inputs:
-      plugin-target-branch:
+      base-branch:
         description: The target (base) branch of the plugin. This is used as the target branch for the pull request.
         type: string
         required: true
-      plugin-source-branch:
-        description: The source (head) branch of the plugin. This is used as a starting point for the version changes. For a normal release it would be develop, but for a hotfix it would be the hotfixing branch.
-        type: string
+      base-sha:
+        description: 'The commit SHA before the current commit'
         required: true
+        type: string
+      head-sha:
+        description: 'The current commit SHA'
+        required: true
+        type: string
 env:
   MAX_SIZE_INCREASE_PERCENT: 10
   MAX_IMAGE_SIZE_KB: 500
@@ -43,6 +47,17 @@ jobs:
           coverage: none
           tools: composer
 
+      - name: Create temporary directory for analysis
+        id: workflow
+        working-directory: ${{ runner.temp }}
+        env:
+          REPO: ${{ github.repository }}
+          PLUGIN_NAME: ${{ vars.PLUGIN_NAME }}
+        run: |
+          mkdir dist
+          echo "DIST=${PWD}/dist" >> "$GITHUB_OUTPUT"
+          echo "PACKAGE=$PLUGIN_NAME" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node.js
         uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
@@ -67,13 +82,20 @@ jobs:
       - name: Build assets
         run: npm run build
 
+      - name: Prepare files for analysis on temporary directory
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
+        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . "$DIST"
+
       # Removed external bundle size analysis to avoid duplicate builds/comments.
 
       - name: Calculate Total Plugin Size
         id: plugin_size
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
         run: |
-          TOTAL_SIZE_BYTES=$(du -sb --exclude=.git --exclude=node_modules --exclude=base . | cut -f1)
-          TOTAL_SIZE_HUMAN=$(numfmt --to=iec --suffix=B "${TOTAL_SIZE_BYTES}")
+          TOTAL_SIZE_BYTES=$(du -sb "$DIST" | cut -f1)
+          TOTAL_SIZE_HUMAN=$(du -sh "$DIST" | cut -f1)
           {
             echo "total_size_bytes=${TOTAL_SIZE_BYTES}"
             echo "total_size_human=${TOTAL_SIZE_HUMAN}"
@@ -81,14 +103,16 @@ jobs:
 
       - name: Calculate PHP Size
         id: php_size
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
         run: |
           # Calculate PHP file sizes (excluding vendor; added back in the final calculation)
-          PHP_SIZE_BYTES=$(find . -name "*.php" -not -path "./vendor/*" -not -path "./base/*" -not -path "./node_modules/*" -not -path "./.git/*" -exec du -sb {} + | awk '{sum += $1} END {print sum}')
+          PHP_SIZE_BYTES=$(find "$DIST" -name "*.php" -not -path "$DIST/vendor/*" -not -path "$DIST/base/*" -not -path "$DIST/node_modules/*" -not -path "$DIST/.git/*" -exec du -sb {} + | awk '{sum += $1} END {print sum}')
 
           PHP_SIZE_HUMAN=$(numfmt --to=iec --suffix=B "${PHP_SIZE_BYTES}")
 
           # Calculate vendor size (Composer dependencies)
-          VENDOR_SIZE_BYTES=$(du -sb vendor 2>/dev/null | cut -f1 || echo "0")
+          VENDOR_SIZE_BYTES=$(du -sb "$DIST/vendor" 2>/dev/null | cut -f1 || echo "0")
           VENDOR_SIZE_HUMAN=$(numfmt --to=iec --suffix=B "${VENDOR_SIZE_BYTES}")
 
           # Total PHP-related size (PHP files + vendor)
@@ -105,10 +129,12 @@ jobs:
 
       - name: Calculate JavaScript Size
         id: js_size
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
         run: |
           # Calculate build directory size (JavaScript/CSS assets)
-          BUILD_SIZE_BYTES=$(du -sb build 2>/dev/null | cut -f1 || echo "0")
-          BUILD_SIZE_HUMAN=$(du -sh build 2>/dev/null | cut -f1 || echo "0")
+          BUILD_SIZE_BYTES=$(du -sb "$DIST/build" 2>/dev/null | cut -f1 || echo "0")
+          BUILD_SIZE_HUMAN=$(du -sh "$DIST/build" 2>/dev/null | cut -f1 || echo "0")
           {
             echo "build_size_bytes=${BUILD_SIZE_BYTES}"
             echo "build_size_human=${BUILD_SIZE_HUMAN}"
@@ -118,7 +144,7 @@ jobs:
         if: github.event_name == 'pull_request'
         id: get_base_sha
         env:
-          BASE_SHA: ${{ inputs.plugin-target-branch }}
+          BASE_SHA: ${{ inputs.base-branch }}
         run: |
           echo "BASE_SHA=$BASE_SHA" >> "${GITHUB_OUTPUT}"
 
@@ -131,18 +157,20 @@ jobs:
 
       - name: Checkout base branch
         if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ steps.get_base_sha.outputs.BASE_SHA }}
-        run: |
-          git checkout "$BASE_SHA"
-          echo "Checked out base branch at SHA: $BASE_SHA"
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ steps.get_base_sha.outputs.BASE_SHA }}
+          clean: true
 
-      - name: Setup workflow context for Base Branch
+      - name: Create temporary directory for Base Branch
         if: github.event_name == 'pull_request'
         id: workflow-base
         working-directory: ${{ runner.temp }}
         env:
-          REPO: ${{ inputs.plugin-repo }}
+          REPO: ${{ github.repository }}
           PLUGIN_NAME: ${{ vars.PLUGIN_NAME }}
         run: |
           mkdir dist_base
@@ -162,21 +190,28 @@ jobs:
       - name: Build JavaScript for Base Branch
         if: github.event_name == 'pull_request'
         run: npm run build
+
+      - name: Prepare files for analysis on temporary directory for Base Branch
+        if: github.event_name == 'pull_request'
+        env:
+          DIST: ${{ steps.workflow-base.outputs.DIST }}
+        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . "$DIST"
+
       - name: Calculate Previous Sizes (base)
         if: github.event_name == 'pull_request'
+        env:
+          DIST: ${{ steps.workflow-base.outputs.DIST }}
         id: prev
         run: |
           # Total size (exclude .git and node_modules, include vendor)
-          PREV_SIZE_BYTES=$(du -sb --exclude=.git --exclude=node_modules base | cut -f1)
-
+          PREV_SIZE_BYTES=$(du -sb --exclude=.git --exclude=node_modules "$DIST" | cut -f1)
           # PHP sizes (php files + vendor)
-          PREV_PHP_SIZE_BYTES=$(find base -name "*.php" -not -path "base/vendor/*" -not -path "base/node_modules/*" -not -path "base/.git/*" -exec du -sb {} + | awk '{sum += $1} END {print sum}')
-          PREV_VENDOR_SIZE_BYTES=$(du -sb base/vendor 2>/dev/null | cut -f1 || echo "0")
+          PREV_PHP_SIZE_BYTES=$(find "$DIST" -name "*.php" -not -path "$DIST/vendor/*" -not -path "$DIST/node_modules/*" -not -path "$DIST/.git/*" -exec du -sb {} + | awk '{sum += $1} END {print sum}')
+          PREV_VENDOR_SIZE_BYTES=$(du -sb "$DIST/vendor" 2>/dev/null | cut -f1 || echo "0")
           PREV_TOTAL_PHP_SIZE_BYTES=$((PREV_PHP_SIZE_BYTES + PREV_VENDOR_SIZE_BYTES))
 
           # JS build dir size
-          PREV_BUILD_SIZE_BYTES=$(du -sb base/build 2>/dev/null | cut -f1 || echo "0")
-
+          PREV_BUILD_SIZE_BYTES=$(du -sb "$DIST/build" 2>/dev/null | cut -f1 || echo "0")
           {
             echo "prev_total_bytes=${PREV_SIZE_BYTES}"
             echo "prev_total_php_bytes=${PREV_TOTAL_PHP_SIZE_BYTES}"
@@ -193,6 +228,8 @@ jobs:
           PREV_TOTAL_SIZE_BYTES: ${{ steps.prev.outputs.prev_total_bytes }}
           PREV_TOTAL_PHP_SIZE_BYTES: ${{ steps.prev.outputs.prev_total_php_bytes }}
           PREV_BUILD_SIZE_BYTES: ${{ steps.prev.outputs.prev_build_bytes }}
+          DIST: ${{ steps.workflow-base.outputs.DIST }}
+
         run: |
           # Compare total sizes
           CURRENT_SIZE=${CURRENT_TOTAL_SIZE_BYTES}
@@ -234,9 +271,9 @@ jobs:
           PHP_INCREASE_PERCENT: ${{ steps.size_comparison.outputs.php_increase_percent }}
           BUILD_SIZE_HUMAN: ${{ steps.js_size.outputs.build_size_human }}
           JS_INCREASE_PERCENT: ${{ steps.size_comparison.outputs.js_increase_percent }}
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_BEFORE: ${{ github.event.before }}
-          EVENT_SHA: ${{ github.sha }}
+          EVENT_BASE_SHA: ${{ inputs.base-sha }}
+          EVENT_SHA: ${{ inputs.head-sha }}
+          DIST: ${{ steps.workflow.outputs.DIST }}
         run: |
           REPORT="final-report-file-size.md"
           {
@@ -276,21 +313,19 @@ jobs:
           fi
 
           # Only show largest files when relevant file types are modified
-          if [ "${EVENT_NAME}" = "push" ] || git diff --name-only "${EVENT_BEFORE}" "${EVENT_SHA}" | grep -E '\\.(php|js|css|json|lock)$' > /dev/null; then
-            {
-              echo
-              echo "### Largest PHP Files"
-              find . -name "*.php" -not -path "./base/*" -not -path "./vendor/*" -not -path "./node_modules/*" -not -path "./.git/*" -exec du -h {} + | sort -rh | head -n 10
-
-              echo
-              echo "### Largest Vendor Dependencies"
-              find vendor -type f -name "*.php" -not -path "./base/*" -exec du -h {} + | sort -rh | head -n 10
-
-              echo
-              echo "### Largest Files Overall"
-              find . -type f -not -path "*/base/*" -not -path "*/\\.*" -not -path "*/node_modules/*" -not -path "*/vendor/*" -exec du -h {} + | sort -rh | head -n 10
-            } >> "${REPORT}"
-          fi
+          
+          {
+            echo
+            echo "### Largest PHP Files"
+            find $DIST -name "*.php" -not -path "$DIST/vendor/*" -not -path "$DIST/base/*" -not -path "$DIST/node_modules/*" -not -path "$DIST/.git/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
+            echo
+            echo "### Largest Vendor Dependencies"
+            find $DIST/vendor -type f -name "*.js" -not -path "$DIST/base/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
+            echo
+            echo "### Largest Files Overall"
+            find $DIST -type f -not -path "*/base/*" -not -path "*/\\.*" -not -path "*/node_modules/*" -not -path "*/vendor/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
+          } >> "${REPORT}"
+        
 
       - name: Enforce thresholds
         if: github.event_name == 'pull_request'
