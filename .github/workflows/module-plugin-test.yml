@@ -272,11 +272,11 @@ jobs:
 
       - name: Run Module Cypress Tests
         if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND == 1 }}
-        run: npm run test:e2e -- --browser chrome --spec "vendor/(${MODULE_REPO}/tests/cypress/integration/*.cy.js),vendor/(${MODULE_REPO}/tests/cypress/integration/**/*.cy.js)"
+        run: npm run test:e2e -- --browser chrome --spec "vendor/${MODULE_REPO}/tests/cypress/integration/*.cy.js,vendor/${MODULE_REPO}/tests/cypress/integration/**/*.cy.js"
 
       - name: Run Remaining Cypress Tests
         if: ${{ ! inputs.only-module-tests }}
-        run: npm run test:e2e -- --browser chrome --spec "tests/cypress/integration/**/*.cy.js,vendor/!(${MODULE_REPO}/tests/cypress/integration/*.cy.js),vendor/!(${MODULE_REPO}/tests/cypress/integration/**/*.cy.js)"
+        run: npm run test:e2e -- --browser chrome --spec "tests/cypress/integration/**/*.cy.js,vendor/!${MODULE_REPO}/tests/cypress/integration/*.cy.js,vendor/!${MODULE_REPO}/tests/cypress/integration/**/*.cy.js"
 
       - name: Store screenshots, videos, and logs of test failures
         if: failure()
