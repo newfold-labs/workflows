@@ -15,6 +15,14 @@ on:
         description: 'The current commit SHA'
         required: true
         type: string
+      head-repo-full-name:
+        description: 'The full repository name (owner/repo) of the head repository'
+        required: true
+        type: string
+      base-repo-full-name:
+        description: 'The full repository name (owner/repo) of the base repository'
+        required: true
+        type: string
 env:
   MAX_SIZE_INCREASE_PERCENT: 10
   MAX_IMAGE_SIZE_KB: 500
@@ -184,11 +192,11 @@ jobs:
           composer-options: '--no-dev --optimize-autoloader --prefer-dist'
 
       - name: NPM Install for Base Branch
-        if: github.repository_owner == 'newfold-labs' && github.event_name == 'pull_request'
+        if: inputs.head-repo-full-name == inputs.base-repo-full-name && github.repository_owner == 'newfold-labs' && github.event_name == 'pull_request'
         run: npm ci --ignore-scripts
 
       - name: Build JavaScript for Base Branch
-        if: github.repository_owner == 'newfold-labs' && github.event_name == 'pull_request'
+        if: inputs.head-repo-full-name == inputs.base-repo-full-name && github.repository_owner == 'newfold-labs' && github.event_name == 'pull_request'
         run: npm run build
 
       - name: Prepare files for analysis on temporary directory for Base Branch
