@@ -184,11 +184,11 @@ jobs:
           composer-options: '--no-dev --optimize-autoloader --prefer-dist'
 
       - name: NPM Install for Base Branch
-        if: github.event_name == 'pull_request'
+        if: github.repository_owner == 'newfold-labs' && github.event_name == 'pull_request'
         run: npm install
 
       - name: Build JavaScript for Base Branch
-        if: github.event_name == 'pull_request'
+        if: github.repository_owner == 'newfold-labs' && github.event_name == 'pull_request'
         run: npm run build
 
       - name: Prepare files for analysis on temporary directory for Base Branch
