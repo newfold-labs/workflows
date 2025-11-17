@@ -185,7 +185,7 @@ jobs:
 
       - name: NPM Install for Base Branch
         if: github.repository_owner == 'newfold-labs' && github.event_name == 'pull_request'
-        run: npm install
+        run: npm ci --ignore-scripts
 
       - name: Build JavaScript for Base Branch
         if: github.repository_owner == 'newfold-labs' && github.event_name == 'pull_request'
