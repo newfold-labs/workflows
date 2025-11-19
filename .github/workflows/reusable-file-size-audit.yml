@@ -23,9 +23,17 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Sanitize Git credentials
+      - name: Sanitize Git credentials and Debug
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          SHA: ${{ github.sha }}
         run: |
           git config --local --unset-all http.https://github.com/.extraheader || true
+          
+          echo "Head Branch: $HEAD_REF"
+          echo "Commit SHA: $SHA"
+          echo "Base Branch: $BASE_REF"
 
       - name: Setup PHP
         uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # v2.35.5
@@ -129,11 +137,11 @@ jobs:
 
       - name: Retrieve Base Branch
         if: github.event_name == 'pull_request'
-        id: get_base_sha
+        id: get_base_ref
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          echo "BASE_SHA=$BASE_SHA" >> "${GITHUB_OUTPUT}"
+          echo "BASE_REF=$BASE_REF" >> "${GITHUB_OUTPUT}"
 
       - name: Checkout base branch
         if: github.event_name == 'pull_request'
@@ -142,7 +150,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
           fetch-tags: true
-          ref: ${{ steps.get_base_sha.outputs.BASE_SHA }}
+          ref: ${{ steps.get_base_ref.outputs.BASE_REF }}
           clean: true
 
       - name: Create temporary directory for Base Branch
