@@ -30,7 +30,6 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           git config --local --unset-all http.https://github.com/.extraheader || true
-          
           echo "Head Branch: $HEAD_REF"
           echo "Commit SHA: $SHA"
           echo "Base Branch: $BASE_REF"
