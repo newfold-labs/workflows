@@ -1,17 +1,7 @@
----
 name: Reusable Audit Plugin Size
 
 on:
   workflow_call:
-    inputs:
-      base-branch:
-        description: The target (base) branch of the plugin. This is used as the target branch for the pull request.
-        type: string
-        required: true
-      head-branch:
-        description: The source (head) branch of the plugin. This is used as a starting point for the version changes. For a normal release it would be develop, but for a hotfix it would be the hotfixing branch.
-        type: string
-        required: true
 env:
   MAX_SIZE_INCREASE_PERCENT: 10
   MAX_ZIP_SIZE_MB: 10
@@ -27,7 +17,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          ref: ${{ inputs.head-branch }}
           persist-credentials: true
           fetch-depth: 0
           fetch-tags: true
@@ -66,8 +55,9 @@ jobs:
           composer --version
           node --version
           npm --version
-      - name: Install npm dependencies
-        run: npm install
+
+      - name: Install NPM Dependencies
+        run: npm ci && rm -f .npmrc
 
       - name: Build JavaScript
         run: npm run build
@@ -123,29 +113,23 @@ jobs:
 
       - name: Retrieve Base Branch
         if: github.event_name == 'pull_request'
-        id: get_base_sha
+        id: get_base_ref
         env:
-          BASE_SHA: ${{ inputs.base-branch }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          echo "BASE_SHA=$BASE_SHA" >> "${GITHUB_OUTPUT}"
-
-      - name: Clean Working Directory
-        if: github.event_name == 'pull_request'
-        run: |
-          git reset --hard HEAD
-          git clean -df
-          echo "Working directory cleaned."
+          echo "BASE_REF=$BASE_REF" >> "${GITHUB_OUTPUT}"
 
       - name: Checkout Repository for Base Branch
         if: github.event_name == 'pull_request'
         env:
-          BASE_SHA: ${{ steps.get_base_sha.outputs.BASE_SHA }}
+          BASE_REF: ${{ steps.get_base_ref.outputs.BASE_REF }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          ref: ${{ env.BASE_SHA }}
-          persist-credentials: true
+          ref: ${{ env.BASE_REF }}
+          persist-credentials: false
           fetch-depth: 0
           fetch-tags: true
+          clean: true
 
       - name: Setup workflow context for Base Branch
         if: github.event_name == 'pull_request'
@@ -160,17 +144,18 @@ jobs:
           echo "PACKAGE=$PLUGIN_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Install PHP Dependencies for base branch
+        if: github.event_name == 'pull_request'
         uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
         with:
           dependency-versions: 'locked'
           composer-options: '--no-dev --optimize-autoloader --prefer-dist'
 
       - name: NPM Install for Base Branch
-        if: github.event_name == 'pull_request'
-        run: npm install
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.event_name == 'pull_request'
+        run: npm ci --ignore-scripts
 
       - name: Build JavaScript for Base Branch
-        if: github.event_name == 'pull_request'
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.event_name == 'pull_request'
         run: npm run build
 
       - name: Prepare files for Base Branch
@@ -221,11 +206,15 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           TOTAL_SIZE_HUMAN: ${{ steps.plugin_size.outputs.total_size_human }}
-          PERCENT_INCREASE: ${{ steps.compare_plugin_sizes.outputs.PERCENT_INCREASE }}
           BASE_TOTAL_SIZE_HUMAN: ${{ steps.base_plugin_size.outputs.base_total_size_human }}
           ZIP_SIZE_HUMAN: ${{ steps.zip_size.outputs.SIZE_HUMAN }}
+          PERCENT_INCREASE: ${{ steps.compare_plugin_sizes.outputs.PERCENT_INCREASE }}
           SIZE_DIFF: ${{ steps.compare_plugin_sizes.outputs.SIZE_DIFF }}
-          FAILED: ${{ steps.compare_plugin_sizes.outputs.FAILED }}
+          FAILED_PERCENT: ${{ steps.compare_plugin_sizes.outputs.FAILED }}
+          ZIP_FAILED: ${{ steps.zip_size.outputs.FAILED }}
+          MAX_SIZE_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
+          MAX_ZIP_SIZE_MB: ${{ env.MAX_ZIP_SIZE_MB }}
+          
         run: |
           REPORT="final-report.md"
           {
@@ -238,10 +227,19 @@ jobs:
             echo "- **Percentage change:** ${PERCENT_INCREASE}%"
             echo "- **Zip file size:** ${ZIP_SIZE_HUMAN}"
             echo ""
-            if [ "${FAILED}" = "true" ]; then
-              echo "⚠️ **Warning:** Plugin size increased by ${PERCENT_INCREASE}%, which exceeds the maximum allowed increase of ${{ env.MAX_SIZE_INCREASE_PERCENT }}%."
+
+            if [ "${FAILED_PERCENT}" = "true" ] || [ "${ZIP_FAILED}" = "true" ]; then
+                                
+                if [ "${FAILED_PERCENT}" = "true" ]; then
+                    echo "⚠️ **Warning (Increase):** Plugin size increased by ${PERCENT_INCREASE}%, exceeding the maximum allowed increase of ${MAX_SIZE_INCREASE_PERCENT}%."
+                fi
+
+                if [ "${ZIP_FAILED}" = "true" ]; then
+                    echo "⚠️ **Warning (Max Size):** The total ZIP file size (${ZIP_SIZE_HUMAN}) exceeds the maximum allowed limit of ${MAX_ZIP_SIZE_MB}MB."
+                fi
+
             else
-              echo "✅ Plugin size change is within acceptable limits."
+                echo "✅ Plugin size change and total ZIP size are within acceptable limits."
             fi
           } > "${REPORT}"
 
@@ -280,11 +278,19 @@ jobs:
               });
             }
 
-      - name: Fail if size increase is too large
+      - name: Fail if size limits are exceeded
+        if: github.event_name == 'pull_request' && ( steps.compare_plugin_sizes.outputs.FAILED == 'true' || steps.zip_size.outputs.FAILED == 'true' )
         env:
           MAX_SIZE_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
           PERCENT_INCREASE: ${{ steps.compare_plugin_sizes.outputs.PERCENT_INCREASE }}
-        if: github.event_name == 'pull_request' && ( steps.compare_plugin_sizes.outputs.FAILED == 'true' || steps.zip_size.outputs.FAILED == 'true' )
+          MAX_ZIP_SIZE_MB: ${{ env.MAX_ZIP_SIZE_MB }}
+          FAILED_PERCENT: ${{ steps.compare_plugin_sizes.outputs.FAILED }}
+          FAILED_ZIP: ${{ steps.zip_size.outputs.FAILED }}
         run: |
-          echo "::error::Plugin size increased by ${PERCENT_INCREASE}%, exceeding the ${MAX_SIZE_INCREASE_PERCENT}% limit."
+          if [ "$FAILED_PERCENT" == "true" ]; then
+            echo "::error::Plugin size increased by ${PERCENT_INCREASE}%, exceeding the ${MAX_SIZE_INCREASE_PERCENT}% limit."
+          fi
+          if [ "$FAILED_ZIP" == "true" ]; then
+            echo "::error::Total ZIP size exceeded the limit of ${MAX_ZIP_SIZE_MB}MB."
+          fi
           exit 1
