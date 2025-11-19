@@ -214,7 +214,6 @@ jobs:
           ZIP_FAILED: ${{ steps.zip_size.outputs.FAILED }}
           MAX_SIZE_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
           MAX_ZIP_SIZE_MB: ${{ env.MAX_ZIP_SIZE_MB }}
-        
         run: |
           REPORT="final-report.md"
           {
