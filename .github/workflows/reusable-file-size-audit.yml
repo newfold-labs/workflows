@@ -2,20 +2,6 @@ name: Reusable Plugin Size and Asset Audit
 
 on:
   workflow_call:
-    inputs:
-      base-branch:
-        description: The target (base) branch of the plugin. This is used as the target branch for the pull request.
-        type: string
-        required: true
-      base-sha:
-        description: 'The commit SHA before the current commit'
-        required: true
-        type: string
-      head-sha:
-        description: 'The current commit SHA'
-        required: true
-        type: string
-        
 env:
   MAX_SIZE_INCREASE_PERCENT: 10
   MAX_IMAGE_SIZE_KB: 500
@@ -145,7 +131,7 @@ jobs:
         if: github.event_name == 'pull_request'
         id: get_base_sha
         env:
-          BASE_SHA: ${{ inputs.base-branch }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           echo "BASE_SHA=$BASE_SHA" >> "${GITHUB_OUTPUT}"
 
@@ -265,8 +251,6 @@ jobs:
           PHP_INCREASE_PERCENT: ${{ steps.size_comparison.outputs.php_increase_percent }}
           BUILD_SIZE_HUMAN: ${{ steps.js_size.outputs.build_size_human }}
           JS_INCREASE_PERCENT: ${{ steps.size_comparison.outputs.js_increase_percent }}
-          EVENT_BASE_SHA: ${{ inputs.base-sha }}
-          EVENT_SHA: ${{ inputs.head-sha }}
           DIST: ${{ steps.workflow.outputs.DIST }}
         run: |
           REPORT="final-report-file-size.md"
