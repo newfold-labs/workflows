@@ -15,14 +15,7 @@ on:
         description: 'The current commit SHA'
         required: true
         type: string
-      head-repo-full-name:
-        description: 'The full repository name (owner/repo) of the head repository'
-        required: true
-        type: string
-      base-repo-full-name:
-        description: 'The full repository name (owner/repo) of the base repository'
-        required: true
-        type: string
+        
 env:
   MAX_SIZE_INCREASE_PERCENT: 10
   MAX_IMAGE_SIZE_KB: 500
@@ -156,18 +149,11 @@ jobs:
         run: |
           echo "BASE_SHA=$BASE_SHA" >> "${GITHUB_OUTPUT}"
 
-      - name: Clean Working Directory
-        if: github.event_name == 'pull_request'
-        run: |
-          git reset --hard HEAD
-          git clean -df
-          echo "Working directory cleaned."
-
       - name: Checkout base branch
         if: github.event_name == 'pull_request'
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
-          persist-credentials: true
+          persist-credentials: false
           fetch-depth: 0
           fetch-tags: true
           ref: ${{ steps.get_base_sha.outputs.BASE_SHA }}
@@ -192,11 +178,11 @@ jobs:
           composer-options: '--no-dev --optimize-autoloader --prefer-dist'
 
       - name: NPM Install for Base Branch
-        if: inputs.head-repo-full-name == github.repository && github.repository_owner == 'newfold-labs' && github.event_name == 'pull_request'
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.event_name == 'pull_request'
         run: npm ci --ignore-scripts
 
       - name: Build JavaScript for Base Branch
-        if: inputs.head-repo-full-name == github.repository && github.repository_owner == 'newfold-labs' && github.event_name == 'pull_request'
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.event_name == 'pull_request'
         run: npm run build
 
       - name: Prepare files for analysis on temporary directory for Base Branch
