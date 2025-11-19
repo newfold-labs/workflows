@@ -214,7 +214,7 @@ jobs:
           ZIP_FAILED: ${{ steps.zip_size.outputs.FAILED }}
           MAX_SIZE_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
           MAX_ZIP_SIZE_MB: ${{ env.MAX_ZIP_SIZE_MB }}
-          
+        
         run: |
           REPORT="final-report.md"
           {
@@ -229,7 +229,7 @@ jobs:
             echo ""
 
             if [ "${FAILED_PERCENT}" = "true" ] || [ "${ZIP_FAILED}" = "true" ]; then
-                                
+
                 if [ "${FAILED_PERCENT}" = "true" ]; then
                     echo "⚠️ **Warning (Increase):** Plugin size increased by ${PERCENT_INCREASE}%, exceeding the maximum allowed increase of ${MAX_SIZE_INCREASE_PERCENT}%."
                 fi
