@@ -141,9 +141,6 @@ jobs:
       - name: Install PHP Dependencies for Plugin
         run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
 
-      - name: Setup Registry for Plugin
-        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
-
       - name: NPM Install for Plugin
         run: npm ci --legacy-peer-deps
 
@@ -204,11 +201,6 @@ jobs:
             echo "Does not have build command"
             echo "hasBuildCommand=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Setup Registry for Module
-        working-directory: vendor/${{ inputs.module-repo }}
-        if: ${{ steps.package.outputs.hasPackageJson != 'false' }}
-        run: printf "\n//npm.pkg.github.com/:_authToken=${{ secrets.NEWFOLD_ACCESS_TOKEN }}" >> .npmrc
 
       - name: NPM Install for Module if package.json exists
         working-directory: vendor/${{ inputs.module-repo }}
