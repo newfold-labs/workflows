@@ -270,13 +270,16 @@ jobs:
           if [[ $MODULE_TESTS_FOUND -eq 0 ]]; then echo "No module Playwright tests found"; else echo "Module Playwright tests found"; fi;
           echo "MODULE_TESTS_FOUND=$MODULE_TESTS_FOUND" >> "$GITHUB_OUTPUT";
 
-      - name: Run Module Playwright Tests
-        if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND == 1 }}
-        run: npm run test:playwright -- --project=${MODULE_REPO}
+      - name: Run All Playwright Tests
+        run: npm run test:playwright
 
-      - name: Run Remaining Playwright Tests
-        if: ${{ ! inputs.only-module-tests }}
-        run: npm run test:playwright -- --grep-invert=${MODULE_REPO}
+      # - name: Run Module Playwright Tests
+      #   if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND == 1 }}
+      #   run: npm run test:playwright -- --project=${MODULE_REPO}
+
+      # - name: Run Remaining Playwright Tests
+      #   if: ${{ ! inputs.only-module-tests }}
+      #   run: npm run test:playwright -- --grep-invert=${MODULE_REPO}
 
       - name: Store test results
         if: failure()
