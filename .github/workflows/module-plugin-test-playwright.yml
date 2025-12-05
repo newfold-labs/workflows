@@ -212,6 +212,11 @@ jobs:
         if: ${{ steps.build.outputs.hasBuildCommand != 'false' }}
         run: npm run build
 
+      # Remove the module's node_modules directory to avoid conflicts with the plugin's node_modules directory when runningplaywright tests
+      - name: Remove the module's node_modules directory
+        working-directory: vendor/${{ inputs.module-repo }}
+        run: rm -rf node_modules
+
       - name: Sync Module build files to Plugin node_modules dir
         if: ${{ (inputs.sync-npm-package) && (inputs.sync-npm-package-name != '') }}
         env:
