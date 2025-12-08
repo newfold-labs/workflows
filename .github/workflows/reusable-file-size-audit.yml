@@ -1,0 +1,392 @@
+name: Reusable Plugin Size and Asset Audit
+
+on:
+  workflow_call:
+env:
+  MAX_SIZE_INCREASE_PERCENT: 10
+  MAX_IMAGE_SIZE_KB: 500
+  MAX_PHP_SIZE_INCREASE_PERCENT: 15
+
+jobs:
+  audit:
+    name: Audit Plugin Size
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Sanitize Git credentials and Debug
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          SHA: ${{ github.sha }}
+        run: |
+          git config --local --unset-all http.https://github.com/.extraheader || true
+          echo "Head Branch: $HEAD_REF"
+          echo "Commit SHA: $SHA"
+          echo "Base Branch: $BASE_REF"
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # v2.35.5
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer
+
+      - name: Create temporary directory for analysis
+        id: workflow
+        working-directory: ${{ runner.temp }}
+        env:
+          REPO: ${{ github.repository }}
+          PLUGIN_NAME: ${{ vars.PLUGIN_NAME }}
+        run: |
+          mkdir dist
+          echo "DIST=${PWD}/dist" >> "$GITHUB_OUTPUT"
+          echo "PACKAGE=$PLUGIN_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Install PHP Dependencies
+        uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
+        with:
+          dependency-versions: 'locked'
+          composer-options: '--no-dev --optimize-autoloader --prefer-dist'
+
+      - name: Setup Registry
+        env:
+          NEWFOLD_ACCESS_TOKEN: ${{ secrets.NEWFOLD_ACCESS_TOKEN }}
+        run: |
+          printf '\n//npm.pkg.github.com/:_authToken=%s' "${NEWFOLD_ACCESS_TOKEN}" >> .npmrc
+
+      - name: Install NPM Dependencies
+        run: npm ci && rm -f .npmrc
+
+      - name: Build assets
+        run: npm run build
+
+      - name: Prepare files for analysis on temporary directory
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
+        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . "$DIST"
+
+      # Removed external bundle size analysis to avoid duplicate builds/comments.
+
+      - name: Calculate Total Plugin Size
+        id: plugin_size
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
+        run: |
+          TOTAL_SIZE_BYTES=$(du -sb "$DIST" | cut -f1)
+          TOTAL_SIZE_HUMAN=$(du -sh "$DIST" | cut -f1)
+          {
+            echo "total_size_bytes=${TOTAL_SIZE_BYTES}"
+            echo "total_size_human=${TOTAL_SIZE_HUMAN}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Calculate PHP Size
+        id: php_size
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
+        run: |
+          # Calculate PHP file sizes (excluding vendor; added back in the final calculation)
+          PHP_SIZE_BYTES=$(find "$DIST" -name "*.php" -not -path "$DIST/vendor/*" -not -path "$DIST/base/*" -not -path "$DIST/node_modules/*" -not -path "$DIST/.git/*" -exec du -sb {} + | awk '{sum += $1} END {print sum}')
+
+          PHP_SIZE_HUMAN=$(numfmt --to=iec --suffix=B "${PHP_SIZE_BYTES}")
+
+          # Calculate vendor size (Composer dependencies)
+          VENDOR_SIZE_BYTES=$(du -sb "$DIST/vendor" 2>/dev/null | cut -f1 || echo "0")
+          VENDOR_SIZE_HUMAN=$(numfmt --to=iec --suffix=B "${VENDOR_SIZE_BYTES}")
+
+          # Total PHP-related size (PHP files + vendor)
+          TOTAL_PHP_SIZE_BYTES=$((PHP_SIZE_BYTES + VENDOR_SIZE_BYTES))
+
+          {
+            echo "php_files_size_bytes=${PHP_SIZE_BYTES}"
+            echo "php_files_size_human=${PHP_SIZE_HUMAN}"
+            echo "vendor_size_bytes=${VENDOR_SIZE_BYTES}"
+            echo "vendor_size_human=${VENDOR_SIZE_HUMAN}"
+            echo "total_php_size_bytes=${TOTAL_PHP_SIZE_BYTES}"
+            echo "total_php_size_human=$(numfmt --to=iec --suffix=B "${TOTAL_PHP_SIZE_BYTES}")"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Calculate JavaScript Size
+        id: js_size
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
+        run: |
+          # Calculate build directory size (JavaScript/CSS assets)
+          BUILD_SIZE_BYTES=$(du -sb "$DIST/build" 2>/dev/null | cut -f1 || echo "0")
+          BUILD_SIZE_HUMAN=$(du -sh "$DIST/build" 2>/dev/null | cut -f1 || echo "0")
+          {
+            echo "build_size_bytes=${BUILD_SIZE_BYTES}"
+            echo "build_size_human=${BUILD_SIZE_HUMAN}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Retrieve Base Branch
+        if: github.event_name == 'pull_request'
+        id: get_base_ref
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          echo "BASE_REF=$BASE_REF" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout base branch
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ steps.get_base_ref.outputs.BASE_REF }}
+          clean: true
+
+      - name: Create temporary directory for Base Branch
+        if: github.event_name == 'pull_request'
+        id: workflow-base
+        working-directory: ${{ runner.temp }}
+        env:
+          REPO: ${{ github.repository }}
+          PLUGIN_NAME: ${{ vars.PLUGIN_NAME }}
+        run: |
+          mkdir dist_base
+          echo "DIST=${PWD}/dist_base" >> "$GITHUB_OUTPUT"
+          echo "PACKAGE=$PLUGIN_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Install PHP Dependencies for Base Branch
+        uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
+        with:
+          dependency-versions: 'locked'
+          composer-options: '--no-dev --optimize-autoloader --prefer-dist'
+
+      - name: NPM Install for Base Branch
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.event_name == 'pull_request'
+        run: npm ci --ignore-scripts
+
+      - name: Build JavaScript for Base Branch
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.event_name == 'pull_request'
+        run: npm run build
+
+      - name: Prepare files for analysis on temporary directory for Base Branch
+        if: github.event_name == 'pull_request'
+        env:
+          DIST: ${{ steps.workflow-base.outputs.DIST }}
+        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . "$DIST"
+
+      - name: Calculate Previous Sizes (base)
+        if: github.event_name == 'pull_request'
+        env:
+          DIST: ${{ steps.workflow-base.outputs.DIST }}
+        id: prev
+        run: |
+          # Total size (exclude .git and node_modules, include vendor)
+          PREV_SIZE_BYTES=$(du -sb --exclude=.git --exclude=node_modules "$DIST" | cut -f1)
+          # PHP sizes (php files + vendor)
+          PREV_PHP_SIZE_BYTES=$(find "$DIST" -name "*.php" -not -path "$DIST/vendor/*" -not -path "$DIST/node_modules/*" -not -path "$DIST/.git/*" -exec du -sb {} + | awk '{sum += $1} END {print sum}')
+          PREV_VENDOR_SIZE_BYTES=$(du -sb "$DIST/vendor" 2>/dev/null | cut -f1 || echo "0")
+          PREV_TOTAL_PHP_SIZE_BYTES=$((PREV_PHP_SIZE_BYTES + PREV_VENDOR_SIZE_BYTES))
+
+          # JS build dir size
+          PREV_BUILD_SIZE_BYTES=$(du -sb "$DIST/build" 2>/dev/null | cut -f1 || echo "0")
+          {
+            echo "prev_total_bytes=${PREV_SIZE_BYTES}"
+            echo "prev_total_php_bytes=${PREV_TOTAL_PHP_SIZE_BYTES}"
+            echo "prev_build_bytes=${PREV_BUILD_SIZE_BYTES}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Compare Size Changes
+        if: github.event_name == 'pull_request'
+        id: size_comparison
+        env:
+          CURRENT_TOTAL_SIZE_BYTES: ${{ steps.plugin_size.outputs.total_size_bytes }}
+          CURRENT_TOTAL_PHP_SIZE_BYTES: ${{ steps.php_size.outputs.total_php_size_bytes }}
+          CURRENT_BUILD_SIZE_BYTES: ${{ steps.js_size.outputs.build_size_bytes }}
+          PREV_TOTAL_SIZE_BYTES: ${{ steps.prev.outputs.prev_total_bytes }}
+          PREV_TOTAL_PHP_SIZE_BYTES: ${{ steps.prev.outputs.prev_total_php_bytes }}
+          PREV_BUILD_SIZE_BYTES: ${{ steps.prev.outputs.prev_build_bytes }}
+          DIST: ${{ steps.workflow-base.outputs.DIST }}
+
+        run: |
+          # Compare total sizes
+          CURRENT_SIZE=${CURRENT_TOTAL_SIZE_BYTES}
+          if [ "${PREV_TOTAL_SIZE_BYTES}" -gt 0 ]; then
+            INCREASE_BYTES=$((CURRENT_SIZE - PREV_TOTAL_SIZE_BYTES))
+            INCREASE_PERCENT=$((INCREASE_BYTES * 100 / PREV_TOTAL_SIZE_BYTES))
+            echo "increase_percent=${INCREASE_PERCENT}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "increase_percent=0" >> "${GITHUB_OUTPUT}"
+          fi
+
+          # Compare PHP sizes
+          CURRENT_PHP_SIZE=${CURRENT_TOTAL_PHP_SIZE_BYTES}
+          if [ "${PREV_TOTAL_PHP_SIZE_BYTES}" -gt 0 ]; then
+            PHP_INCREASE_BYTES=$((CURRENT_PHP_SIZE - PREV_TOTAL_PHP_SIZE_BYTES))
+            PHP_INCREASE_PERCENT=$((PHP_INCREASE_BYTES * 100 / PREV_TOTAL_PHP_SIZE_BYTES))
+            echo "php_increase_percent=${PHP_INCREASE_PERCENT}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "php_increase_percent=0" >> "${GITHUB_OUTPUT}"
+          fi
+
+          # Compare JS sizes
+          CURRENT_JS_SIZE=${CURRENT_BUILD_SIZE_BYTES}
+          if [ "${PREV_BUILD_SIZE_BYTES}" -gt 0 ]; then
+            JS_INCREASE_BYTES=$((CURRENT_JS_SIZE - PREV_BUILD_SIZE_BYTES))
+            JS_INCREASE_PERCENT=$((JS_INCREASE_BYTES * 100 / PREV_BUILD_SIZE_BYTES))
+            echo "js_increase_percent=${JS_INCREASE_PERCENT}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "js_increase_percent=0" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Generate Report
+        env:
+          TOTAL_SIZE_HUMAN: ${{ steps.plugin_size.outputs.total_size_human }}
+          INCREASE_PERCENT: ${{ steps.size_comparison.outputs.increase_percent }}
+          PHP_FILES_SIZE_HUMAN: ${{ steps.php_size.outputs.php_files_size_human }}
+          VENDOR_SIZE_HUMAN: ${{ steps.php_size.outputs.vendor_size_human }}
+          TOTAL_PHP_SIZE_HUMAN: ${{ steps.php_size.outputs.total_php_size_human }}
+          PHP_INCREASE_PERCENT: ${{ steps.size_comparison.outputs.php_increase_percent }}
+          BUILD_SIZE_HUMAN: ${{ steps.js_size.outputs.build_size_human }}
+          JS_INCREASE_PERCENT: ${{ steps.size_comparison.outputs.js_increase_percent }}
+          DIST: ${{ steps.workflow.outputs.DIST }}
+        run: |
+          REPORT="final-report-file-size.md"
+          {
+            echo "## Plugin Size Audit Report"
+            echo
+            echo "### Total Plugin Size"
+            echo "- Current Size: ${TOTAL_SIZE_HUMAN}"
+          } > "${REPORT}"
+
+          if [ -n "${INCREASE_PERCENT}" ]; then
+            echo "- Size Change: ${INCREASE_PERCENT}%" >> "${REPORT}"
+          fi
+
+          {
+            echo
+            echo "### PHP Analysis"
+            echo "- PHP Files: ${PHP_FILES_SIZE_HUMAN}"
+            echo "- Vendor Dependencies: ${VENDOR_SIZE_HUMAN}"
+            echo "- Total PHP Size: ${TOTAL_PHP_SIZE_HUMAN}"
+          } >> "${REPORT}"
+
+          if [ -n "${PHP_INCREASE_PERCENT}" ]; then
+            echo "- PHP Size Change: ${PHP_INCREASE_PERCENT}%" >> "${REPORT}"
+          fi
+
+          {
+            echo
+            echo "### Assets Analysis"
+            echo "Build directory size is reported below; see largest files sections for hotspots."
+            echo
+            echo "### JavaScript/CSS Assets"
+            echo "- Build Directory: ${BUILD_SIZE_HUMAN}"
+          } >> "${REPORT}"
+
+          if [ -n "${JS_INCREASE_PERCENT}" ]; then
+            echo "- Build Size Change: ${JS_INCREASE_PERCENT}%" >> "${REPORT}"
+          fi
+
+          # Only show largest files when relevant file types are modified
+          {
+            echo
+            echo "### Largest PHP Files"
+            find "$DIST" -name "*.php" -not -path "$DIST/vendor/*" -not -path "$DIST/base/*" -not -path "$DIST/node_modules/*" -not -path "$DIST/.git/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
+            echo
+            echo "### Largest Vendor Dependencies"
+            find "$DIST/vendor" -type f -name "*.js" -not -path "$DIST/base/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
+            echo
+            echo "### Largest Files Overall"
+            find "$DIST" -type f -not -path "*/base/*" -not -path "*/\\.*" -not -path "*/node_modules/*" -not -path "*/vendor/*" -exec du -h {} + | sed "s|$DIST/||" | sort -rh | head -n 10
+          } >> "${REPORT}"
+
+      - name: Enforce thresholds
+        if: github.event_name == 'pull_request'
+        env:
+          MAX_SIZE_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
+          MAX_PHP_SIZE_INCREASE_PERCENT: ${{ env.MAX_PHP_SIZE_INCREASE_PERCENT }}
+          SIZE_INCREASE_PERCENT: ${{ steps.size_comparison.outputs.increase_percent }}
+          PHP_SIZE_INCREASE_PERCENT: ${{ steps.size_comparison.outputs.php_increase_percent }}
+        run: |
+          FAIL=0
+          if [ -n "${SIZE_INCREASE_PERCENT}" ] && [ "${SIZE_INCREASE_PERCENT}" -gt "${MAX_SIZE_INCREASE_PERCENT}" ]; then
+            echo "Total plugin size increase ${SIZE_INCREASE_PERCENT}% exceeds threshold ${MAX_SIZE_INCREASE_PERCENT}%" >&2
+            FAIL=1
+          fi
+          if [ -n "${PHP_SIZE_INCREASE_PERCENT}" ] && [ "${PHP_SIZE_INCREASE_PERCENT}" -gt "${MAX_PHP_SIZE_INCREASE_PERCENT}" ]; then
+            echo "PHP size increase ${PHP_SIZE_INCREASE_PERCENT}% exceeds threshold ${MAX_PHP_SIZE_INCREASE_PERCENT}%" >&2
+            FAIL=1
+          fi
+          exit "${FAIL}"
+
+      - name: Check image sizes
+        env:
+          MAX_IMAGE_SIZE_KB: ${{ env.MAX_IMAGE_SIZE_KB }}
+        run: |
+          MAPFILE_CMD=$(command -v mapfile || command -v readarray)
+          if [ -z "${MAPFILE_CMD}" ]; then MAPFILE_CMD=mapfile; fi
+          ${MAPFILE_CMD} -d '' OVERSIZED < <(find . \
+            -type f \
+            -not -path "./base/*" -not -path "./.git/*" -not -path "./node_modules/*" -not -path "./vendor/*" -not -path "./build/*" \
+            \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*.svg" -o -iname "*.webp" \) \
+            -size "+${MAX_IMAGE_SIZE_KB}k" -print0)
+          if [ "${#OVERSIZED[@]}" -gt 0 ]; then
+            echo "The following images exceed ${MAX_IMAGE_SIZE_KB}KB:" >&2
+            printf '%s\0' "${OVERSIZED[@]}" | xargs -0 du -h | sort -rh >&2
+            exit 1
+          fi
+
+      - name: Comment PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('final-report-file-size.md', 'utf8');
+
+            // Check if we already have a comment from this workflow
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existingComment = comments.data.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('## Plugin Size Audit Report')
+            );
+
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: report
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: report
+              });
+            }
+
+      - name: Upload Reports
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: size-report-${{ github.event.repository.name }}-${{ github.event_name == 'pull_request' && github.event.number || github.sha }}
+          path: final-report-file-size.md
+          retention-days: 90
