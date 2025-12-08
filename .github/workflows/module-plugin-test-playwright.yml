@@ -277,11 +277,11 @@ jobs:
 
       - name: Run Module Playwright Tests First
         if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND == 1 }}
-        run: npm run test:playwright -- --project=${MODULE_REPO}
+        run: npm run test:playwright -- --project="${MODULE_REPO}"
 
       - name: Run Remaining Playwright Tests
         if: ${{ ! inputs.only-module-tests }}
-        run: npm run test:playwright -- --grep-invert=${MODULE_REPO}
+        run: npm run test:playwright -- --grep-invert="${MODULE_REPO}"
 
       # - name: Run All Playwright Tests
       #   run: npm run test:playwright
