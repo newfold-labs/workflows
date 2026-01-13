@@ -253,6 +253,7 @@ jobs:
         with:
           path: ${{ steps.workflow.outputs.DIST }}
           name: ${{ inputs.artifact-name != '' && inputs.artifact-name || steps.workflow.outputs.PACKAGE }}
+          include-hidden-files: true
 
       - name: Configure WordPress
         env:
