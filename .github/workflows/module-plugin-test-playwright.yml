@@ -285,12 +285,11 @@ jobs:
         if: ${{ steps.check-for-module-tests.outputs.MODULE_TESTS_FOUND == 1 }}
         run: npm run test:playwright -- --project="${MODULE_REPO}"
 
-      - name: Run Remaining Playwright Tests
+      - name: Run All Playwright Tests
+      # This includes running the module tests again with the remaining tests.
+      # This is to ensure module tests still pass when running all tests.
         if: ${{ ! inputs.only-module-tests }}
-        run: npm run test:playwright -- --grep-invert="${MODULE_REPO}"
-
-      # - name: Run All Playwright Tests
-      #   run: npm run test:playwright
+        run: npm run test:playwright
 
       - name: Store test results
         if: failure()
