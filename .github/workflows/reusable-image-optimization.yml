@@ -1,0 +1,59 @@
+name: Reusable Image Optimization
+
+on:
+  workflow_call:
+    inputs:
+      trigger-event:
+        description: 'The event that triggered the workflow'
+        required: true
+        type: string
+jobs:
+  optimize-images:
+    name: Optimize Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Sanitize Git credentials
+        run: |
+          git config --local --unset-all http.https://github.com/.extraheader || true
+
+      - name: Image Optimization
+        if: inputs.trigger-event == 'pull_request'
+        id: image_optimization
+        env:
+          GITHUB_EVENT_NAME: ${{ inputs.trigger-event }}
+        uses: calibreapp/image-actions@f32575787d333b0579f0b7d506ff03be63a669d1 # v1.4.1
+        with:
+          GITHUB_TOKEN: ${{ github.token }}
+          compressOnly: false
+          jpegQuality: '82'
+          pngQuality: '82'
+          webpQuality: '86'
+
+      - name: Create Pull Request
+        if: inputs.trigger-event == 'push' && steps.image_optimization.outputs.markdown != ''
+        uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725 # v8.0.0
+        with:
+          token: ${{ github.token }}
+          commit-message: 'Optimize images'
+          title: 'Optimize images'
+          body: |
+            This PR contains optimized images with the following quality settings:
+            - JPEG: 82% quality
+            - PNG: 82% quality
+            - WebP: 86% quality
+
+            These settings follow WordPress Core standards for optimal balance between file size and visual quality.
+
+            ${{ steps.image_optimization.outputs.markdown }}
+          branch: image-optimization-${{ github.sha }}
+          delete-branch: true
