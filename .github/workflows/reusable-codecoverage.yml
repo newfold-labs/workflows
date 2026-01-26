@@ -36,7 +36,7 @@ on:
         type: string
         default: '5.7'
     secrets:
-      GITHUB_TOKEN:
+      github_token:
         description: GitHub token for committing to gh-pages
         required: false
 
@@ -188,7 +188,7 @@ jobs:
           commit_message: ${{ format('🤖 Save code coverage report to gh-pages {0}%', steps.coverage-percentage.outputs.coverage-rounded) }}
           commit_options: ""
         env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          GITHUB_TOKEN: "${{ secrets.github_token }}"
 
       - name: Add coverage badge to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
