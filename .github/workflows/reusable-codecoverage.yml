@@ -44,6 +44,12 @@ jobs:
 
   codecoverage:
     runs-on: ubuntu-latest
+    permissions:
+      # Write access is needed to commit coverage reports to gh-pages branch
+      # (write permission includes read access for checkout)
+      contents: write
+      # Write access is needed to post comments on pull requests
+      pull-requests: write
 
     services:
       mysql:
