@@ -35,10 +35,6 @@ on:
         description: MySQL version for the service container
         type: string
         default: '5.7'
-      third-party-plugin:
-        description: Third-party plugin to install via composer (e.g., 'wpackagist-plugin/woocommerce:8.1.2'). If not provided, no third-party plugin is installed.
-        type: string
-        required: false
     secrets:
       repo_token:
         description: GitHub token for committing to gh-pages
@@ -124,18 +120,6 @@ jobs:
       - name: Run composer install
         continue-on-error: true
         run: composer install -v
-
-      # Install a third-party plugin via composer
-      # If the .zip of a wpackagist-plugin fails to download, it will attempt to download from source – SVN – which
-      # is not installed by default on the latest Ubuntu GitHub Actions image.
-      - name: Install third-party plugin (if a wpackagist-plugin, use subversion)
-        if: ${{ inputs.third-party-plugin != '' }}
-        run: |
-          if [[ "${{ inputs.third-party-plugin }}" == *"wpackagist"* ]]; then
-            sudo apt-get update
-            sudo apt-get install -y subversion
-          fi
-          composer require ${{ inputs.third-party-plugin }}
 
       - name: Allow writing to wp-content
         run: sudo chmod -R a+w wp-content
