@@ -121,8 +121,17 @@ jobs:
         continue-on-error: true
         run: composer install -v
 
+      - name: Check if wp-content directory exists
+        id: check-wp-content
+        run: |
+          if [ -d "wp-content" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Allow writing to wp-content
-        if: ${{ hashFiles('wp-content') != '' }} # TODO: This may be incorrect since it's a directory.
+        if: ${{ steps.check-wp-content.outputs.exists == 'true' }}
         run: sudo chmod -R a+w wp-content
 
       # On main, there will be a previous coverage report. On PRs we create a new directory using the commit SHA.
