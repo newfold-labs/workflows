@@ -142,11 +142,11 @@ jobs:
           mkdir gh-pages/phpunit || true;
 
       - name: Run unit tests
-        if: ${{ hashFiles('tests/phpunit/**.php') != '' }} # Only run unit tests if they are present.
+        if: ${{ hashFiles('tests/phpunit/**/*Test.php') != '' }} # Only run when there are actual test files (not just bootstrap/example).
         run: XDEBUG_MODE=coverage vendor/bin/phpunit --bootstrap tests/phpunit/bootstrap.php --coverage-php tests/_output/unit.cov --debug
 
       - name: Run wpunit tests
-        if: ${{ hashFiles('tests/wpunit/**.php') != '' }} # Only run wpunit tests if they are present.
+        if: ${{ hashFiles('tests/wpunit/**/*Test.php') != '' }} # Only run when there are actual test files (not just bootstrap/example).
         run: XDEBUG_MODE=coverage vendor/bin/codecept run wpunit --coverage tests/_output/wpunit.cov --debug
 
       - name: Run integration tests
