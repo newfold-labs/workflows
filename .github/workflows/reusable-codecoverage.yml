@@ -112,6 +112,9 @@ jobs:
           tools: composer, jaschilz/php-coverage-badger
           extensions: zip
 
+      - name: Setup test environment
+        run: cp .env.testing.example .env.testing
+
       - name: Read .env.testing
         uses: c-py/action-dotenv-to-setenv@925b5d99a3f1e4bd7b4e9928be4e2491e29891d9 # v5
         with:
