@@ -112,10 +112,21 @@ jobs:
           tools: composer, jaschilz/php-coverage-badger
           extensions: zip
 
+      - name: Check for .env.testing.example
+        id: check-env-testing-example
+        run: |
+          if [ -f ".env.testing.example" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup test environment
+        if: ${{ steps.check-env-testing-example.outputs.exists == 'true' }}
         run: cp .env.testing.example .env.testing
 
       - name: Read .env.testing
+        if: ${{ steps.check-env-testing-example.outputs.exists == 'true' }}
         uses: c-py/action-dotenv-to-setenv@925b5d99a3f1e4bd7b4e9928be4e2491e29891d9 # v5
         with:
           env-file: .env.testing
