@@ -132,7 +132,6 @@ jobs:
           env-file: .env.testing
 
       - name: Run composer install
-        continue-on-error: true
         run: composer install -v
 
       - name: Check if wp-content directory exists
