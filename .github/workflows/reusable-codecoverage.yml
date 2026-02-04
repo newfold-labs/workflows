@@ -155,7 +155,7 @@ jobs:
           rm -rf gh-pages/phpunit || true;
           mkdir gh-pages/phpunit || true;
 
-      - name: Check if unit tests exist
+      - name: Check if PHPUnit tests exist
         id: check-unit-tests
         run: |
           if [ -d "tests/phpunit" ] && find tests/phpunit -name '*Test.php' -type f 2>/dev/null | grep -q .; then
@@ -164,11 +164,11 @@ jobs:
             echo "has_tests=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run unit tests
+      - name: Run PHPUnit tests
         if: ${{ steps.check-unit-tests.outputs.has_tests == 'true' }}
         run: XDEBUG_MODE=coverage vendor/bin/phpunit --bootstrap tests/phpunit/bootstrap.php --coverage-php tests/_output/unit.cov --debug
 
-      - name: Check if wpunit tests exist
+      - name: Check if WPUnit tests exist
         id: check-wpunit-tests
         run: |
           if [ -d "tests/wpunit" ] && find tests/wpunit -name '*Test.php' -type f 2>/dev/null | grep -q .; then
@@ -177,11 +177,11 @@ jobs:
             echo "has_tests=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run wpunit tests
+      - name: Run WPUnit tests
         if: ${{ steps.check-wpunit-tests.outputs.has_tests == 'true' }}
         run: XDEBUG_MODE=coverage vendor/bin/codecept run wpunit --coverage tests/_output/wpunit.cov --debug
 
-      - name: Run integration tests
+      - name: Run Integration tests
         if: ${{ hashFiles('tests/integration.suite') != '' }} # Only run integration tests if they are present.
         run: XDEBUG_MODE=coverage vendor/bin/codecept run integration --debug
 
