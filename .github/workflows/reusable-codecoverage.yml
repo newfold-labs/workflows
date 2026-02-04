@@ -112,16 +112,26 @@ jobs:
           tools: composer, jaschilz/php-coverage-badger
           extensions: zip
 
+      - name: Check for .env.testing.example
+        id: check-env-testing-example
+        run: |
+          if [ -f ".env.testing.example" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup test environment
+        if: ${{ steps.check-env-testing-example.outputs.exists == 'true' }}
         run: cp .env.testing.example .env.testing
 
       - name: Read .env.testing
+        if: ${{ steps.check-env-testing-example.outputs.exists == 'true' }}
         uses: c-py/action-dotenv-to-setenv@925b5d99a3f1e4bd7b4e9928be4e2491e29891d9 # v5
         with:
           env-file: .env.testing
 
       - name: Run composer install
-        continue-on-error: true
         run: composer install -v
 
       - name: Check if wp-content directory exists
@@ -144,7 +154,7 @@ jobs:
           rm -rf gh-pages/phpunit || true;
           mkdir gh-pages/phpunit || true;
 
-      - name: Check if unit tests exist
+      - name: Check if PHPUnit tests exist
         id: check-unit-tests
         run: |
           if [ -d "tests/phpunit" ] && find tests/phpunit -name '*Test.php' -type f 2>/dev/null | grep -q .; then
@@ -153,11 +163,11 @@ jobs:
             echo "has_tests=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run unit tests
+      - name: Run PHPUnit tests
         if: ${{ steps.check-unit-tests.outputs.has_tests == 'true' }}
         run: XDEBUG_MODE=coverage vendor/bin/phpunit --bootstrap tests/phpunit/bootstrap.php --coverage-php tests/_output/unit.cov --debug
 
-      - name: Check if wpunit tests exist
+      - name: Check if WPUnit tests exist
         id: check-wpunit-tests
         run: |
           if [ -d "tests/wpunit" ] && find tests/wpunit -name '*Test.php' -type f 2>/dev/null | grep -q .; then
@@ -166,11 +176,11 @@ jobs:
             echo "has_tests=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run wpunit tests
+      - name: Run WPUnit tests
         if: ${{ steps.check-wpunit-tests.outputs.has_tests == 'true' }}
         run: XDEBUG_MODE=coverage vendor/bin/codecept run wpunit --coverage tests/_output/wpunit.cov --debug
 
-      - name: Run integration tests
+      - name: Run Integration tests
         if: ${{ hashFiles('tests/integration.suite') != '' }} # Only run integration tests if they are present.
         run: XDEBUG_MODE=coverage vendor/bin/codecept run integration --debug
 
