@@ -184,16 +184,25 @@ jobs:
         if: ${{ hashFiles('tests/integration.suite') != '' }} # Only run integration tests if they are present.
         run: XDEBUG_MODE=coverage vendor/bin/codecept run integration --debug
 
-      # Read base (main) branch coverage from gh-pages for PR comparison. Only needed for coverage-php-version on PR.
+      # Read base (main) branch coverage from gh-pages for PR comparison. Main's coverage lives at gh-pages/phpunit/.
       - name: Get base branch coverage percentage
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         id: base-coverage
         run: |
           base_pct=""
-          if [ -f "gh-pages/phpunit/clover.xml" ]; then
-            rate=$(grep -oE '(line-rate|statement-rate)="[0-9.]+"' gh-pages/phpunit/clover.xml | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
+          clover="gh-pages/phpunit/clover.xml"
+          if [ -f "$clover" ]; then
+            # Try decimal rate first (e.g. line-rate="0.20" or statement-rate="0.20")
+            rate=$(grep -oE '(line-rate|statement-rate)="[0-9.]+"' "$clover" | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
             if [ -n "$rate" ]; then
               base_pct=$(awk "BEGIN { printf \"%.0f\", $rate * 100 }")
+            else
+              # Phpcov/Clover XML uses <metrics statements="N" coveredstatements="M"/> — compute percentage
+              stmts=$(grep -oP 'statements="\K[0-9]+' "$clover" | head -1)
+              covered=$(grep -oP 'coveredstatements="\K[0-9]+' "$clover" | head -1)
+              if [ -n "$stmts" ] && [ -n "$covered" ] && [ "$stmts" -gt 0 ]; then
+                base_pct=$(awk "BEGIN { printf \"%.0f\", ($covered / $stmts) * 100 }")
+              fi
             fi
           fi
           echo "base_coverage=${base_pct}" >> "$GITHUB_OUTPUT"
