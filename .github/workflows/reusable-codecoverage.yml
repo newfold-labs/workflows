@@ -302,12 +302,21 @@ jobs:
       - name: Add phpcov uncovered lines report to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         continue-on-error: true # phpcov can fail if there are no uncovered lines
+        env:
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           BRANCHED_COMMIT=$(git rev-list origin..HEAD | tail -n 1)
           echo "BRANCHED_COMMIT=$BRANCHED_COMMIT"
-          git diff "$BRANCHED_COMMIT"...${{ github.event.pull_request.head.sha }} > branch.diff
+          git diff "$BRANCHED_COMMIT"... "${PR_SHA}" > branch.diff
           cat branch.diff
-          OUTPUT=$(vendor/bin/phpcov patch-coverage --path-prefix "$(pwd)" ./gh-pages/${{ github.event.pull_request.head.sha }}/phpunit/phpunit.cov branch.diff || true)
+          COV_FILE="./gh-pages/${PR_SHA}/phpunit/phpunit.cov"
+          # Use canonical path so it matches paths stored in the coverage file (PHP realpath)
+          PATH_PREFIX=$(realpath . 2>/dev/null || echo "$GITHUB_WORKSPACE")
+          OUTPUT=$(vendor/bin/phpcov patch-coverage --path-prefix "$PATH_PREFIX" "$COV_FILE" branch.diff 2>&1) || true
+          if echo "$OUTPUT" | grep -q "Unable to detect executable lines"; then
+            # Fallback: try with empty prefix (some environments store relative paths in .cov)
+            OUTPUT=$(vendor/bin/phpcov patch-coverage "$COV_FILE" branch.diff 2>&1) || true
+          fi
           echo "$OUTPUT"
           echo "$OUTPUT" >> coverage-comment.md
 
