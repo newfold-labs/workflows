@@ -185,7 +185,7 @@ jobs:
         run: XDEBUG_MODE=coverage vendor/bin/codecept run integration --debug
 
       # Read base (main) branch coverage from gh-pages for PR comparison. Main's coverage lives at gh-pages/phpunit/.
-      # Precision: two decimals for display (matches action default). Decrease check uses integer rounding so small fluctuations don't fail.
+      # Use the project-level <metrics> (has files="N") so we don't mix values from different elements (e.g. 100% from a class).
       - name: Get base branch coverage percentage
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         id: base-coverage
@@ -198,10 +198,15 @@ jobs:
             if [ -n "$rate" ]; then
               base_pct=$(awk "BEGIN { printf \"%.2f\", $rate * 100 }")
             else
-              # Phpcov/Clover XML: each <file> has <metrics/> and project has final <metrics/> (aggregate).
-              # Use last occurrence so we get project-level coverage, not the first file's (which can be 0%).
-              stmts=$(grep -oP 'statements="\K[0-9]+' "$clover" | tail -1)
-              covered=$(grep -oP 'coveredstatements="\K[0-9]+' "$clover" | tail -1)
+              # Project-level <metrics> in Clover has files="N" (file count); use that line so we get one consistent pair.
+              project_line=$(grep -E 'files="[0-9]+".*statements=.*coveredstatements=' "$clover" | tail -1)
+              if [ -n "$project_line" ]; then
+                stmts=$(echo "$project_line" | grep -oP 'statements="\K[0-9]+' | head -1)
+                covered=$(echo "$project_line" | grep -oP 'coveredstatements="\K[0-9]+' | head -1)
+              else
+                stmts=$(grep -oP 'statements="\K[0-9]+' "$clover" | tail -1)
+                covered=$(grep -oP 'coveredstatements="\K[0-9]+' "$clover" | tail -1)
+              fi
               if [ -n "$stmts" ] && [ -n "$covered" ] && [ "$stmts" -gt 0 ]; then
                 base_pct=$(awk "BEGIN { printf \"%.2f\", ($covered / $stmts) * 100 }")
               fi
