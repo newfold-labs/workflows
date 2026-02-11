@@ -103,7 +103,7 @@ jobs:
           disable_rules: 'dangerous-write,shellcheck,credentials,local-action'
 
       - name: Upload SARIF file to GitHub
-        uses: github/codeql-action/upload-sarif@cdefb33c0f6224e58673d9004f47f7cb3e328b89 # v4.31.10
+        uses: github/codeql-action/upload-sarif@45cbd0c69e560cd9e7cd7f8c32362050c9b7ded2 # v4.32.2
         with:
           sarif_file: "${{steps.octoscan.outputs.sarif_output}}"
           category: octoscan
@@ -133,7 +133,7 @@ jobs:
         uses: boostsecurityio/poutine-action@84c0a0d32e8d57ae12651222be1eb15351429228 # v0.15.2
 
       - name: Upload poutine SARIF file
-        uses: github/codeql-action/upload-sarif@cdefb33c0f6224e58673d9004f47f7cb3e328b89 # v4.31.10
+        uses: github/codeql-action/upload-sarif@45cbd0c69e560cd9e7cd7f8c32362050c9b7ded2 # v4.32.2
         with:
           sarif_file: results.sarif
           category: poutine
@@ -160,4 +160,4 @@ jobs:
           show-progress: ${{ runner.debug == '1' && 'true' || 'false' }}
 
       - name: Run zizmor
-        uses: zizmorcore/zizmor-action@e639db99335bc9038abc0e066dfcd72e23d26fb4 # v0.3.0
+        uses: zizmorcore/zizmor-action@0dce2577a4760a2749d8cfb7a84b7d5585ebcb7d # v0.5.0
