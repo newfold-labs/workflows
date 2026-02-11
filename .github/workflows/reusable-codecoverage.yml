@@ -112,25 +112,35 @@ jobs:
           tools: composer, jaschilz/php-coverage-badger
           extensions: zip
 
+      - name: Check for .env.testing.example
+        id: check-env-testing-example
+        run: |
+          if [ -f ".env.testing.example" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup test environment
+        if: ${{ steps.check-env-testing-example.outputs.exists == 'true' }}
         run: cp .env.testing.example .env.testing
 
       - name: Read .env.testing
+        if: ${{ steps.check-env-testing-example.outputs.exists == 'true' }}
         uses: c-py/action-dotenv-to-setenv@925b5d99a3f1e4bd7b4e9928be4e2491e29891d9 # v5
         with:
           env-file: .env.testing
 
       - name: Run composer install
-        continue-on-error: true
         run: composer install -v
 
       - name: Check if wp-content directory exists
         id: check-wp-content
         run: |
           if [ -d "wp-content" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Allow writing to wp-content
@@ -144,35 +154,58 @@ jobs:
           rm -rf gh-pages/phpunit || true;
           mkdir gh-pages/phpunit || true;
 
-      - name: Check if unit tests exist
+      - name: Check if PHPUnit tests exist
         id: check-unit-tests
         run: |
           if [ -d "tests/phpunit" ] && find tests/phpunit -name '*Test.php' -type f 2>/dev/null | grep -q .; then
-            echo "has_tests=true" >> $GITHUB_OUTPUT
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_tests=false" >> $GITHUB_OUTPUT
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run unit tests
+      - name: Run PHPUnit tests
         if: ${{ steps.check-unit-tests.outputs.has_tests == 'true' }}
         run: XDEBUG_MODE=coverage vendor/bin/phpunit --bootstrap tests/phpunit/bootstrap.php --coverage-php tests/_output/unit.cov --debug
 
-      - name: Check if wpunit tests exist
+      - name: Check if WPUnit tests exist
         id: check-wpunit-tests
         run: |
           if [ -d "tests/wpunit" ] && find tests/wpunit -name '*Test.php' -type f 2>/dev/null | grep -q .; then
-            echo "has_tests=true" >> $GITHUB_OUTPUT
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_tests=false" >> $GITHUB_OUTPUT
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run wpunit tests
+      - name: Run WPUnit tests
         if: ${{ steps.check-wpunit-tests.outputs.has_tests == 'true' }}
         run: XDEBUG_MODE=coverage vendor/bin/codecept run wpunit --coverage tests/_output/wpunit.cov --debug
 
-      - name: Run integration tests
+      - name: Run Integration tests
         if: ${{ hashFiles('tests/integration.suite') != '' }} # Only run integration tests if they are present.
         run: XDEBUG_MODE=coverage vendor/bin/codecept run integration --debug
+
+      # Read base (main) branch coverage from gh-pages for PR comparison. Main's coverage lives at gh-pages/phpunit/.
+      - name: Get base branch coverage percentage
+        if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
+        id: base-coverage
+        run: |
+          base_pct=""
+          clover="gh-pages/phpunit/clover.xml"
+          if [ -f "$clover" ]; then
+            # Try decimal rate first (e.g. line-rate="0.20" or statement-rate="0.20")
+            rate=$(grep -oE '(line-rate|statement-rate)="[0-9.]+"' "$clover" | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
+            if [ -n "$rate" ]; then
+              base_pct=$(awk "BEGIN { printf \"%.0f\", $rate * 100 }")
+            else
+              # Phpcov/Clover XML uses <metrics statements="N" coveredstatements="M"/> — compute percentage
+              stmts=$(grep -oP 'statements="\K[0-9]+' "$clover" | head -1)
+              covered=$(grep -oP 'coveredstatements="\K[0-9]+' "$clover" | head -1)
+              if [ -n "$stmts" ] && [ -n "$covered" ] && [ "$stmts" -gt 0 ]; then
+                base_pct=$(awk "BEGIN { printf \"%.0f\", ($covered / $stmts) * 100 }")
+              fi
+            fi
+          fi
+          echo "base_coverage=${base_pct}" >> "$GITHUB_OUTPUT"
 
       # For PRs, we'll generate the coverage report on each pushed commit
       - name: Merge code coverage for PR
@@ -226,30 +259,74 @@ jobs:
         env:
           GITHUB_TOKEN: "${{ secrets.repo_token }}"
 
+      - name: Add coverage comparison to PR comment
+        if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
+        env:
+          BASE_COVERAGE: ${{ steps.base-coverage.outputs.base_coverage }}
+          PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+        run: |
+          {
+            if [ -z "$PR_COVERAGE" ]; then
+              echo "**Coverage:** (no report)"
+            elif [ -z "$BASE_COVERAGE" ]; then
+              echo "**Coverage:** (first run) → PR **${PR_COVERAGE}%**"
+            else
+              echo "**Coverage:** Base **${BASE_COVERAGE}%** → PR **${PR_COVERAGE}%** (must not decrease)."
+              if [ "$PR_COVERAGE" -lt "$BASE_COVERAGE" ]; then
+                echo "❌ **Coverage decreased.**"
+                echo ""
+                echo "Please add unit tests for the new or changed code in this PR so coverage is maintained or improved."
+              else
+                echo "✅ No decrease."
+              fi
+            fi
+            echo ""
+          } >> coverage-comment.md
+
       - name: Add coverage badge to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
+        env:
+          REPO_NAME: ${{ inputs.repository-name }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          echo "[![Code Coverage ](https://newfold-labs.github.io/${{ inputs.repository-name }}/${{ github.event.pull_request.head.sha }}/phpunit/coverage.svg)](https://newfold-labs.github.io/${{ inputs.repository-name }}/${{ github.event.pull_request.head.sha }}/phpunit/html/)" >> coverage-comment.md
-          echo "" >> coverage-comment.md
-          echo "" >> coverage-comment.md
+          {
+            echo "[![Code Coverage ](https://newfold-labs.github.io/${REPO_NAME}/${PR_SHA}/phpunit/coverage.svg)](https://newfold-labs.github.io/${REPO_NAME}/${PR_SHA}/phpunit/html/)"
+            echo ""
+            echo ""
+          } >> coverage-comment.md
 
       - name: Add coverage report link to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
+        env:
+          PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+          REPO_NAME: ${{ inputs.repository-name }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          echo "${{ format('[project coverage report {0}%](https://newfold-labs.github.io/{1}/{2}/phpunit/html/) @ {3}', steps.coverage-percentage.outputs.coverage-rounded, inputs.repository-name, github.event.pull_request.head.sha, github.event.pull_request.head.sha) }}" >> coverage-comment.md
-          echo "" >> coverage-comment.md
-          echo "" >> coverage-comment.md
+          {
+            echo "[project coverage report ${PR_COVERAGE}%](https://newfold-labs.github.io/${REPO_NAME}/${PR_SHA}/phpunit/html/) @ ${PR_SHA}"
+            echo ""
+            echo ""
+          } >> coverage-comment.md
 
       - name: Add phpcov uncovered lines report to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         continue-on-error: true # phpcov can fail if there are no uncovered lines
+        env:
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          BRANCHED_COMMIT=$(git rev-list origin..HEAD | tail -n 1);
+          BRANCHED_COMMIT=$(git rev-list origin..HEAD | tail -n 1)
           echo "BRANCHED_COMMIT=$BRANCHED_COMMIT"
-          git diff $BRANCHED_COMMIT...${{ github.event.pull_request.head.sha }} > branch.diff;
-          cat branch.diff;
-          OUTPUT=${vendor/bin/phpcov patch-coverage --path-prefix $(pwd) ./gh-pages/${{ github.event.pull_request.head.sha }}/phpunit/phpunit.cov branch.diff || true}
-          echo $OUTPUT;
+          git diff "$BRANCHED_COMMIT"... "${PR_SHA}" > branch.diff
+          cat branch.diff
+          COV_FILE="./gh-pages/${PR_SHA}/phpunit/phpunit.cov"
+          # Use canonical path so it matches paths stored in the coverage file (PHP realpath)
+          PATH_PREFIX=$(realpath . 2>/dev/null || echo "$GITHUB_WORKSPACE")
+          OUTPUT=$(vendor/bin/phpcov patch-coverage --path-prefix "$PATH_PREFIX" "$COV_FILE" branch.diff 2>&1) || true
+          if echo "$OUTPUT" | grep -q "Unable to detect executable lines"; then
+            # Fallback: try with empty prefix (some environments store relative paths in .cov)
+            OUTPUT=$(vendor/bin/phpcov patch-coverage "$COV_FILE" branch.diff 2>&1) || true
+          fi
+          echo "$OUTPUT"
           echo "$OUTPUT" >> coverage-comment.md
 
       - name: Add coverage PR comment
@@ -259,3 +336,23 @@ jobs:
         with:
           message-id: coverage-report
           message-path: coverage-comment.md
+
+      # Fail the job if PR coverage is lower than base (main) so merge is blocked until coverage is maintained or improved.
+      - name: Ensure coverage does not decrease
+        if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
+        env:
+          BASE_COVERAGE: ${{ steps.base-coverage.outputs.base_coverage }}
+          PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+        run: |
+          # Only compare when both are non-empty and numeric (validate untrusted step outputs)
+          case "$BASE_COVERAGE" in
+            ''|*[!0-9]*) echo "Skipping check (no base or PR coverage)."; exit 0 ;;
+          esac
+          case "$PR_COVERAGE" in
+            ''|*[!0-9]*) echo "Skipping check (no base or PR coverage)."; exit 0 ;;
+          esac
+          if [ "$PR_COVERAGE" -lt "$BASE_COVERAGE" ]; then
+            echo "::error::Coverage decreased from ${BASE_COVERAGE}% to ${PR_COVERAGE}%. PRs must not decrease code coverage. Add unit tests for the new or changed code in this PR."
+            exit 1
+          fi
+          echo "Coverage maintained or improved (${BASE_COVERAGE}% → ${PR_COVERAGE}%)."
