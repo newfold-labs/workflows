@@ -197,9 +197,10 @@ jobs:
             if [ -n "$rate" ]; then
               base_pct=$(awk "BEGIN { printf \"%.0f\", $rate * 100 }")
             else
-              # Phpcov/Clover XML uses <metrics statements="N" coveredstatements="M"/> — compute percentage
-              stmts=$(grep -oP 'statements="\K[0-9]+' "$clover" | head -1)
-              covered=$(grep -oP 'coveredstatements="\K[0-9]+' "$clover" | head -1)
+              # Phpcov/Clover XML: each <file> has <metrics/> and project has final <metrics/> (aggregate).
+              # Use last occurrence so we get project-level coverage, not the first file's (which can be 0%).
+              stmts=$(grep -oP 'statements="\K[0-9]+' "$clover" | tail -1)
+              covered=$(grep -oP 'coveredstatements="\K[0-9]+' "$clover" | tail -1)
               if [ -n "$stmts" ] && [ -n "$covered" ] && [ "$stmts" -gt 0 ]; then
                 base_pct=$(awk "BEGIN { printf \"%.0f\", ($covered / $stmts) * 100 }")
               fi
