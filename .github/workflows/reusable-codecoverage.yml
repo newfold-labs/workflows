@@ -185,6 +185,7 @@ jobs:
         run: XDEBUG_MODE=coverage vendor/bin/codecept run integration --debug
 
       # Read base (main) branch coverage from gh-pages for PR comparison. Main's coverage lives at gh-pages/phpunit/.
+      # Precision: two decimals for display (matches action default). Decrease check uses integer rounding so small fluctuations don't fail.
       - name: Get base branch coverage percentage
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         id: base-coverage
@@ -195,14 +196,14 @@ jobs:
             # Try decimal rate first (e.g. line-rate="0.20" or statement-rate="0.20")
             rate=$(grep -oE '(line-rate|statement-rate)="[0-9.]+"' "$clover" | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
             if [ -n "$rate" ]; then
-              base_pct=$(awk "BEGIN { printf \"%.0f\", $rate * 100 }")
+              base_pct=$(awk "BEGIN { printf \"%.2f\", $rate * 100 }")
             else
               # Phpcov/Clover XML: each <file> has <metrics/> and project has final <metrics/> (aggregate).
               # Use last occurrence so we get project-level coverage, not the first file's (which can be 0%).
               stmts=$(grep -oP 'statements="\K[0-9]+' "$clover" | tail -1)
               covered=$(grep -oP 'coveredstatements="\K[0-9]+' "$clover" | tail -1)
               if [ -n "$stmts" ] && [ -n "$covered" ] && [ "$stmts" -gt 0 ]; then
-                base_pct=$(awk "BEGIN { printf \"%.0f\", ($covered / $stmts) * 100 }")
+                base_pct=$(awk "BEGIN { printf \"%.2f\", ($covered / $stmts) * 100 }")
               fi
             fi
           fi
@@ -222,7 +223,7 @@ jobs:
           vendor/bin/phpcov merge --clover clover.xml tests/_output/;
           vendor/bin/phpcov merge --clover gh-pages/phpunit/clover.xml --php gh-pages/phpunit/phpunit.cov --html gh-pages/phpunit/html/ tests/_output/;
 
-      # This makes the coverage percentage available in `{{ steps.coverage-percentage.outputs.coverage-rounded }}`.
+      # PR coverage percentage. Uses action default rounded-precision (2 decimals). Output coverage-rounded is used for comment, commit message, and decrease check.
       - name: Check test coverage
         if: ${{ matrix.php == inputs.coverage-php-version }}
         uses: johanvanhelden/gha-clover-test-coverage-check@2543c79a701f179bd63aa14c16c6938c509b2cec # v1
@@ -231,7 +232,6 @@ jobs:
           percentage: ${{ inputs.minimum-coverage }}
           exit: false
           filename: clover.xml
-          rounded-precision: "0"
 
       # See: https://github.blog/2009-12-29-bypassing-jekyll-on-github-pages/
       - name: Add `.nojekyll` file so code coverage report successfully deploys to gh-pages
@@ -273,7 +273,10 @@ jobs:
               echo "**Coverage:** (first run) → PR **${PR_COVERAGE}%**"
             else
               echo "**Coverage:** Base **${BASE_COVERAGE}%** → PR **${PR_COVERAGE}%** (must not decrease)."
-              if [ "$PR_COVERAGE" -lt "$BASE_COVERAGE" ]; then
+              # Compare rounded to integer so small fluctuations (e.g. 16.45% → 16.44%) don't trigger failure
+              BASE_INT=$(awk "BEGIN { print int($BASE_COVERAGE + 0.5) }" 2>/dev/null)
+              PR_INT=$(awk "BEGIN { print int($PR_COVERAGE + 0.5) }" 2>/dev/null)
+              if [ -n "$BASE_INT" ] && [ -n "$PR_INT" ] && [ "$PR_INT" -lt "$BASE_INT" ]; then
                 echo "❌ **Coverage decreased.**"
                 echo ""
                 echo "Please add unit tests for the new or changed code in this PR so coverage is maintained or improved."
@@ -339,20 +342,23 @@ jobs:
           message-path: coverage-comment.md
 
       # Fail the job if PR coverage is lower than base (main) so merge is blocked until coverage is maintained or improved.
+      # Comparison uses integer rounding so small fluctuations (e.g. 16.45% → 16.44%) don't fail the build.
       - name: Ensure coverage does not decrease
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         env:
           BASE_COVERAGE: ${{ steps.base-coverage.outputs.base_coverage }}
           PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
         run: |
-          # Only compare when both are non-empty and numeric (validate untrusted step outputs)
+          # Only compare when both are non-empty and numeric (allow decimals, e.g. 16.45)
           case "$BASE_COVERAGE" in
-            ''|*[!0-9]*) echo "Skipping check (no base or PR coverage)."; exit 0 ;;
+            ''|*[!0-9.]*) echo "Skipping check (no base or PR coverage)."; exit 0 ;;
           esac
           case "$PR_COVERAGE" in
-            ''|*[!0-9]*) echo "Skipping check (no base or PR coverage)."; exit 0 ;;
+            ''|*[!0-9.]*) echo "Skipping check (no base or PR coverage)."; exit 0 ;;
           esac
-          if [ "$PR_COVERAGE" -lt "$BASE_COVERAGE" ]; then
+          BASE_INT=$(awk "BEGIN { print int($BASE_COVERAGE + 0.5) }" 2>/dev/null)
+          PR_INT=$(awk "BEGIN { print int($PR_COVERAGE + 0.5) }" 2>/dev/null)
+          if [ -n "$BASE_INT" ] && [ -n "$PR_INT" ] && [ "$PR_INT" -lt "$BASE_INT" ]; then
             echo "::error::Coverage decreased from ${BASE_COVERAGE}% to ${PR_COVERAGE}%. PRs must not decrease code coverage. Add unit tests for the new or changed code in this PR."
             exit 1
           fi
