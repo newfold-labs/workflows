@@ -116,9 +116,9 @@ jobs:
         id: check-env-testing-example
         run: |
           if [ -f ".env.testing.example" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup test environment
@@ -138,9 +138,9 @@ jobs:
         id: check-wp-content
         run: |
           if [ -d "wp-content" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Allow writing to wp-content
@@ -158,9 +158,9 @@ jobs:
         id: check-unit-tests
         run: |
           if [ -d "tests/phpunit" ] && find tests/phpunit -name '*Test.php' -type f 2>/dev/null | grep -q .; then
-            echo "has_tests=true" >> $GITHUB_OUTPUT
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_tests=false" >> $GITHUB_OUTPUT
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run PHPUnit tests
@@ -171,9 +171,9 @@ jobs:
         id: check-wpunit-tests
         run: |
           if [ -d "tests/wpunit" ] && find tests/wpunit -name '*Test.php' -type f 2>/dev/null | grep -q .; then
-            echo "has_tests=true" >> $GITHUB_OUTPUT
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_tests=false" >> $GITHUB_OUTPUT
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run WPUnit tests
@@ -239,27 +239,31 @@ jobs:
       - name: Add coverage badge to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         run: |
-          echo "[![Code Coverage ](https://newfold-labs.github.io/${{ inputs.repository-name }}/${{ github.event.pull_request.head.sha }}/phpunit/coverage.svg)](https://newfold-labs.github.io/${{ inputs.repository-name }}/${{ github.event.pull_request.head.sha }}/phpunit/html/)" >> coverage-comment.md
-          echo "" >> coverage-comment.md
-          echo "" >> coverage-comment.md
+          {
+            echo "[![Code Coverage ](https://newfold-labs.github.io/${{ inputs.repository-name }}/${{ github.event.pull_request.head.sha }}/phpunit/coverage.svg)](https://newfold-labs.github.io/${{ inputs.repository-name }}/${{ github.event.pull_request.head.sha }}/phpunit/html/)"
+            echo ""
+            echo ""
+          } >> coverage-comment.md
 
       - name: Add coverage report link to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         run: |
-          echo "${{ format('[project coverage report {0}%](https://newfold-labs.github.io/{1}/{2}/phpunit/html/) @ {3}', steps.coverage-percentage.outputs.coverage-rounded, inputs.repository-name, github.event.pull_request.head.sha, github.event.pull_request.head.sha) }}" >> coverage-comment.md
-          echo "" >> coverage-comment.md
-          echo "" >> coverage-comment.md
+          {
+            echo "${{ format('[project coverage report {0}%](https://newfold-labs.github.io/{1}/{2}/phpunit/html/) @ {3}', steps.coverage-percentage.outputs.coverage-rounded, inputs.repository-name, github.event.pull_request.head.sha, github.event.pull_request.head.sha) }}"
+            echo ""
+            echo ""
+          } >> coverage-comment.md
 
       - name: Add phpcov uncovered lines report to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         continue-on-error: true # phpcov can fail if there are no uncovered lines
         run: |
-          BRANCHED_COMMIT=$(git rev-list origin..HEAD | tail -n 1);
+          BRANCHED_COMMIT=$(git rev-list origin..HEAD | tail -n 1)
           echo "BRANCHED_COMMIT=$BRANCHED_COMMIT"
-          git diff $BRANCHED_COMMIT...${{ github.event.pull_request.head.sha }} > branch.diff;
-          cat branch.diff;
-          OUTPUT=${vendor/bin/phpcov patch-coverage --path-prefix $(pwd) ./gh-pages/${{ github.event.pull_request.head.sha }}/phpunit/phpunit.cov branch.diff || true}
-          echo $OUTPUT;
+          git diff "$BRANCHED_COMMIT"...${{ github.event.pull_request.head.sha }} > branch.diff
+          cat branch.diff
+          OUTPUT=$(vendor/bin/phpcov patch-coverage --path-prefix "$(pwd)" ./gh-pages/${{ github.event.pull_request.head.sha }}/phpunit/phpunit.cov branch.diff || true)
+          echo "$OUTPUT"
           echo "$OUTPUT" >> coverage-comment.md
 
       - name: Add coverage PR comment
