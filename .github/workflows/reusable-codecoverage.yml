@@ -184,6 +184,20 @@ jobs:
         if: ${{ hashFiles('tests/integration.suite') != '' }} # Only run integration tests if they are present.
         run: XDEBUG_MODE=coverage vendor/bin/codecept run integration --debug
 
+      # Read base (main) branch coverage from gh-pages for PR comparison. Only needed for coverage-php-version on PR.
+      - name: Get base branch coverage percentage
+        if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
+        id: base-coverage
+        run: |
+          base_pct=""
+          if [ -f "gh-pages/phpunit/clover.xml" ]; then
+            rate=$(grep -oE '(line-rate|statement-rate)="[0-9.]+"' gh-pages/phpunit/clover.xml | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
+            if [ -n "$rate" ]; then
+              base_pct=$(awk "BEGIN { printf \"%.0f\", $rate * 100 }")
+            fi
+          fi
+          echo "base_coverage=${base_pct}" >> "$GITHUB_OUTPUT"
+
       # For PRs, we'll generate the coverage report on each pushed commit
       - name: Merge code coverage for PR
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
@@ -236,6 +250,30 @@ jobs:
         env:
           GITHUB_TOKEN: "${{ secrets.repo_token }}"
 
+      - name: Add coverage comparison to PR comment
+        if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
+        env:
+          BASE_COVERAGE: ${{ steps.base-coverage.outputs.base_coverage }}
+          PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+        run: |
+          {
+            if [ -z "$PR_COVERAGE" ]; then
+              echo "**Coverage:** (no report)"
+            elif [ -z "$BASE_COVERAGE" ]; then
+              echo "**Coverage:** (first run) → PR **${PR_COVERAGE}%**"
+            else
+              echo "**Coverage:** Base **${BASE_COVERAGE}%** → PR **${PR_COVERAGE}%** (must not decrease)."
+              if [ "$PR_COVERAGE" -lt "$BASE_COVERAGE" ]; then
+                echo "❌ **Coverage decreased.**"
+                echo ""
+                echo "Please add unit tests for the new or changed code in this PR so coverage is maintained or improved."
+              else
+                echo "✅ No decrease."
+              fi
+            fi
+            echo ""
+          } >> coverage-comment.md
+
       - name: Add coverage badge to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         run: |
@@ -273,3 +311,20 @@ jobs:
         with:
           message-id: coverage-report
           message-path: coverage-comment.md
+
+      # Fail the job if PR coverage is lower than base (main) so merge is blocked until coverage is maintained or improved.
+      - name: Ensure coverage does not decrease
+        if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
+        env:
+          BASE_COVERAGE: ${{ steps.base-coverage.outputs.base_coverage }}
+          PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+        run: |
+          if [ -z "$BASE_COVERAGE" ] || [ -z "$PR_COVERAGE" ]; then
+            echo "Skipping check (no base or PR coverage)."
+            exit 0
+          fi
+          if [ "$PR_COVERAGE" -lt "$BASE_COVERAGE" ]; then
+            echo "::error::Coverage decreased from ${BASE_COVERAGE}% to ${PR_COVERAGE}%. PRs must not decrease code coverage. Add unit tests for the new or changed code in this PR."
+            exit 1
+          fi
+          echo "Coverage maintained or improved (${BASE_COVERAGE}% → ${PR_COVERAGE}%)."
