@@ -184,35 +184,55 @@ jobs:
         if: ${{ hashFiles('tests/integration.suite') != '' }} # Only run integration tests if they are present.
         run: XDEBUG_MODE=coverage vendor/bin/codecept run integration --debug
 
-      # Read base (main) branch coverage from gh-pages for PR comparison. Main's coverage lives at gh-pages/phpunit/.
-      # Use the project-level <metrics> (has files="N") so we don't mix values from different elements (e.g. 100% from a class).
+      # Base coverage = value stored on main when the badge was last generated (same calculation as badge and PR).
+      # Reading coverage.txt avoids re-parsing clover.xml on every PR. Fallback to parsing clover if file is missing.
       - name: Get base branch coverage percentage
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         id: base-coverage
         run: |
           base_pct=""
-          clover="gh-pages/phpunit/clover.xml"
-          if [ -f "$clover" ]; then
-            # Try decimal rate first (e.g. line-rate="0.20" or statement-rate="0.20")
-            rate=$(grep -oE '(line-rate|statement-rate)="[0-9.]+"' "$clover" | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
-            if [ -n "$rate" ]; then
-              base_pct=$(awk "BEGIN { printf \"%.2f\", $rate * 100 }")
+          coverage_file="gh-pages/phpunit/coverage.txt"
+          if [ -f "$coverage_file" ]; then
+            read_pct=$(tr -d ' \r\n' < "$coverage_file")
+            if [ -n "$read_pct" ] && [ "$read_pct" = "${read_pct#*[!0-9.]}" ]; then
+              base_pct="$read_pct"
+            fi
+          fi
+          if [ -z "$base_pct" ] && [ -f "gh-pages/phpunit/clover.xml" ]; then
+            clover="gh-pages/phpunit/clover.xml"
+            total=$(grep -oP 'elements="\K[0-9]+' "$clover" 2>/dev/null | awk '{s+=$1} END {print s+0}')
+            covered=$(grep -oP 'coveredelements="\K[0-9]+' "$clover" 2>/dev/null | awk '{s+=$1} END {print s+0}')
+            if [ -n "$total" ] && [ "$total" -gt 0 ] && [ -n "$covered" ]; then
+              base_pct=$(awk "BEGIN { printf \"%.2f\", ($covered / $total) * 100 }")
             else
-              # Project-level <metrics> in Clover has files="N" (file count); use that line so we get one consistent pair.
-              project_line=$(grep -E 'files="[0-9]+".*statements=.*coveredstatements=' "$clover" | tail -1)
-              if [ -n "$project_line" ]; then
-                stmts=$(echo "$project_line" | grep -oP 'statements="\K[0-9]+' | head -1)
-                covered=$(echo "$project_line" | grep -oP 'coveredstatements="\K[0-9]+' | head -1)
-              else
-                stmts=$(grep -oP 'statements="\K[0-9]+' "$clover" | tail -1)
-                covered=$(grep -oP 'coveredstatements="\K[0-9]+' "$clover" | tail -1)
-              fi
-              if [ -n "$stmts" ] && [ -n "$covered" ] && [ "$stmts" -gt 0 ]; then
-                base_pct=$(awk "BEGIN { printf \"%.2f\", ($covered / $stmts) * 100 }")
+              total=$(grep -oP 'statements="\K[0-9]+' "$clover" 2>/dev/null | awk '{s+=$1} END {print s+0}')
+              covered=$(grep -oP 'coveredstatements="\K[0-9]+' "$clover" 2>/dev/null | awk '{s+=$1} END {print s+0}')
+              if [ -n "$total" ] && [ "$total" -gt 0 ] && [ -n "$covered" ]; then
+                base_pct=$(awk "BEGIN { printf \"%.2f\", ($covered / $total) * 100 }")
               fi
             fi
           fi
           echo "base_coverage=${base_pct}" >> "$GITHUB_OUTPUT"
+
+      # Skip coverage-decrease failure when PR only touches dependency/lock/config (e.g. Dependabot).
+      - name: Detect dependency-only PR
+        if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
+        id: dependency-only
+        run: |
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          mb=$(git merge-base "$base_sha" HEAD 2>/dev/null) || mb="$base_sha"
+          changed=$(git diff --name-only "$mb"...HEAD 2>/dev/null || echo "")
+          if [ -z "$changed" ]; then
+            echo "dependency_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Only these paths count as dependency-only; any other path means we enforce coverage.
+          non_dep=$(echo "$changed" | grep -vE '^composer\.lock$|^package-lock\.json$|^yarn\.lock$|^pnpm-lock\.yaml$|^\.github/dependabot\.yml$|^\.github/dependabot\.yaml$' || true)
+          if [ -z "$non_dep" ]; then
+            echo "dependency_only=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dependency_only=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # For PRs, we'll generate the coverage report on each pushed commit
       - name: Merge code coverage for PR
@@ -228,7 +248,7 @@ jobs:
           vendor/bin/phpcov merge --clover clover.xml tests/_output/;
           vendor/bin/phpcov merge --clover gh-pages/phpunit/clover.xml --php gh-pages/phpunit/phpunit.cov --html gh-pages/phpunit/html/ tests/_output/;
 
-      # PR coverage percentage. Uses action default rounded-precision (2 decimals). Output coverage-rounded is used for comment, commit message, and decrease check.
+      # PR coverage percentage. Use metric "elements" (action default) so it matches base calculation above.
       - name: Check test coverage
         if: ${{ matrix.php == inputs.coverage-php-version }}
         uses: johanvanhelden/gha-clover-test-coverage-check@2543c79a701f179bd63aa14c16c6938c509b2cec # v1
@@ -237,6 +257,7 @@ jobs:
           percentage: ${{ inputs.minimum-coverage }}
           exit: false
           filename: clover.xml
+          metric: elements
 
       # See: https://github.blog/2009-12-29-bypassing-jekyll-on-github-pages/
       - name: Add `.nojekyll` file so code coverage report successfully deploys to gh-pages
@@ -249,6 +270,13 @@ jobs:
       - name: Update README coverage badge
         if: ${{ (matrix.php == inputs.coverage-php-version) && (github.ref == 'refs/heads/main') }} # only commit on main, on the PHP version we're using in production.
         run: php-coverage-badger clover.xml gh-pages/phpunit/coverage.svg
+
+      # Store coverage percentage on main so PRs can use it as base (same value as badge; no need to re-parse clover on PRs).
+      - name: Write base coverage for PR comparison
+        if: ${{ (matrix.php == inputs.coverage-php-version) && (github.ref == 'refs/heads/main') }}
+        run: |
+          echo '${{ steps.coverage-percentage.outputs.coverage-rounded }}' > gh-pages/phpunit/coverage.txt
+          git -C gh-pages add phpunit/coverage.txt
 
       - name: Generate PR coverage badge
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
@@ -270,6 +298,7 @@ jobs:
         env:
           BASE_COVERAGE: ${{ steps.base-coverage.outputs.base_coverage }}
           PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+          DEPENDENCY_ONLY: ${{ steps.dependency-only.outputs.dependency_only }}
         run: |
           {
             if [ -z "$PR_COVERAGE" ]; then
@@ -278,15 +307,18 @@ jobs:
               echo "**Coverage:** (first run) → PR **${PR_COVERAGE}%**"
             else
               echo "**Coverage:** Base **${BASE_COVERAGE}%** → PR **${PR_COVERAGE}%** (must not decrease)."
-              # Compare rounded to integer so small fluctuations (e.g. 16.45% → 16.44%) don't trigger failure
-              BASE_INT=$(awk "BEGIN { print int($BASE_COVERAGE + 0.5) }" 2>/dev/null)
-              PR_INT=$(awk "BEGIN { print int($PR_COVERAGE + 0.5) }" 2>/dev/null)
-              if [ -n "$BASE_INT" ] && [ -n "$PR_INT" ] && [ "$PR_INT" -lt "$BASE_INT" ]; then
-                echo "❌ **Coverage decreased.**"
-                echo ""
-                echo "Please add unit tests for the new or changed code in this PR so coverage is maintained or improved."
+              if [ "$DEPENDENCY_ONLY" = "true" ]; then
+                echo "📦 Dependency-only PR; coverage decrease check skipped."
               else
-                echo "✅ No decrease."
+                BASE_INT=$(awk "BEGIN { print int($BASE_COVERAGE + 0.5) }" 2>/dev/null)
+                PR_INT=$(awk "BEGIN { print int($PR_COVERAGE + 0.5) }" 2>/dev/null)
+                if [ -n "$BASE_INT" ] && [ -n "$PR_INT" ] && [ "$PR_INT" -lt "$BASE_INT" ]; then
+                  echo "❌ **Coverage decreased.**"
+                  echo ""
+                  echo "Please add unit tests for the new or changed code in this PR so coverage is maintained or improved."
+                else
+                  echo "✅ No decrease."
+                fi
               fi
             fi
             echo ""
@@ -347,14 +379,18 @@ jobs:
           message-path: coverage-comment.md
 
       # Fail the job if PR coverage is lower than base (main) so merge is blocked until coverage is maintained or improved.
-      # Comparison uses integer rounding so small fluctuations (e.g. 16.45% → 16.44%) don't fail the build.
+      # Skipped for dependency-only PRs (e.g. Dependabot). Comparison uses integer rounding to absorb small tooling variance.
       - name: Ensure coverage does not decrease
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         env:
           BASE_COVERAGE: ${{ steps.base-coverage.outputs.base_coverage }}
           PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+          DEPENDENCY_ONLY: ${{ steps.dependency-only.outputs.dependency_only }}
         run: |
-          # Only compare when both are non-empty and numeric (allow decimals, e.g. 16.45)
+          if [ "$DEPENDENCY_ONLY" = "true" ]; then
+            echo "Dependency-only PR; skipping coverage decrease check."
+            exit 0
+          fi
           case "$BASE_COVERAGE" in
             ''|*[!0-9.]*) echo "Skipping check (no base or PR coverage)."; exit 0 ;;
           esac
