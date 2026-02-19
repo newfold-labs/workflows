@@ -271,12 +271,16 @@ jobs:
         if: ${{ (matrix.php == inputs.coverage-php-version) && (github.ref == 'refs/heads/main') }} # only commit on main, on the PHP version we're using in production.
         run: php-coverage-badger clover.xml gh-pages/phpunit/coverage.svg
 
-      # Store coverage percentage on main so PRs can use it as base (same value as badge; no need to re-parse clover on PRs).
+      # Store coverage percentage on main so PRs can use it as base. Validate before write to avoid expression/code injection.
       - name: Write base coverage for PR comparison
         if: ${{ (matrix.php == inputs.coverage-php-version) && (github.ref == 'refs/heads/main') }}
+        env:
+          COVERAGE_PCT: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
         run: |
-          echo '${{ steps.coverage-percentage.outputs.coverage-rounded }}' > gh-pages/phpunit/coverage.txt
-          git -C gh-pages add phpunit/coverage.txt
+          if [[ -n "$COVERAGE_PCT" && "$COVERAGE_PCT" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+            printf '%s' "$COVERAGE_PCT" > gh-pages/phpunit/coverage.txt
+            git -C gh-pages add phpunit/coverage.txt
+          fi
 
       - name: Generate PR coverage badge
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
