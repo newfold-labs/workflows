@@ -8,6 +8,26 @@
 #   `package.json` file must also contain the `i18n`, `i18n-ci-pre`, and `i18n-ci-post` scripts. They should run the
 #   corresponding Composer scripts, plus any other necessary scripts.
 #
+# Inputs:
+#   text_domain (required)
+#     Text domain for translation (e.g. plugin or theme slug).
+#
+#   run-azure-ai-translate (optional, default: true)
+#     Whether to run the Azure AI translation step. Set false to only run i18n-ci-pre / i18n-ci-post and open PRs for those changes.
+#
+#   i18n-script-location (optional, default: 'composer')
+#     Where i18n scripts are run from. Use "npm" if the repo runs i18n via package.json (e.g. @wordpress/scripts).
+#
+#   po-wrapwidth (optional, default: 77)
+#     Line wrap width when the Python script saves PO files (gettext-style). Only used when the translate script actually writes a file; ignored when po-nowrap is true. Use to match your gettext/xgettext wrap width and reduce formatting-only diffs.
+#
+#   po-nowrap (optional, default: false)
+#     If true, the Python script saves PO files with no line wrapping (each msgid/msgstr on one line). Reduces formatting-only diffs. Reference comments (#:) may be output as one long line (polib limitation).
+#
+# Secrets:
+#   TRANSLATOR_API_KEY (required)
+#     Azure Translator (Cognitive Services) API key for the translate script.
+#
 name: Reusable Translation Workflow
 
 on:
@@ -27,6 +47,16 @@ on:
         required: false
         type: string
         default: 'composer'
+      po-wrapwidth:
+        description: 'Line wrap width when saving PO files (default 77, match gettext). Ignored when po-nowrap is true.'
+        required: false
+        type: number
+        default: 77
+      po-nowrap:
+        description: 'If true, do not wrap long msgid/msgstr (one line each). Reduces formatting-only diffs; refs (#:) may become one long line (polib limitation).'
+        required: false
+        type: boolean
+        default: false
 
     secrets:
       TRANSLATOR_API_KEY:
@@ -175,16 +205,17 @@ jobs:
   # Automatically translates untranslated strings using the Azure AI translation service.
   #
   # This job will:
-  # - Check out the repository.
-  # - Downloads the patch file from the previous step.
-  # - Applies the patch file.
-  # - Sets up Python.
-  # - Installs Python dependencies.
-  # - Downloads the Python translation script from the workflow repository.
-  # - Translates PO and JSON files using the Azure AI translation service.
-  # - Removes the downloaded translation script.
-  # - Creates a diff file of the changes.
-  # - Saves the diff file as an artifact for use in future steps.
+  # - Check out the repository and apply the patch from the prepare-for-translation job.
+  # - Set up Python and install dependencies (requests, polib).
+  # - Check for untranslated strings: scan all PO files under languages/ for entries with empty msgstr.
+  #   Only when at least one such entry exists:
+  #   - Download the Python translation script from the workflow repository.
+  #   - Translate PO and JSON files (Azure AI). PO formatting is controlled by inputs po-wrapwidth and po-nowrap.
+  #   - Remove the downloaded script.
+  #   - Create a new diff from the translation changes and overwrite the artifact.
+  # - When no untranslated strings exist, the translate script is skipped so PO files are not rewritten,
+  #   avoiding formatting-only diffs. The artifact from prepare-for-translation is left unchanged and re-uploaded.
+  # - Saves the diff file as an artifact for use in process-translations and create-translation-pr.
   auto-translate-with-azure:
     name: Auto-Translate with Azure AI
     runs-on: ubuntu-latest
@@ -220,19 +251,42 @@ jobs:
       - name: Install Python dependencies
         run: pip install requests polib
 
+      - name: Check for untranslated strings in PO files
+        id: check-untranslated
+        run: |
+          if python3 -c "
+          import polib
+          from pathlib import Path
+          for path in Path('languages').rglob('*.po'):
+              po = polib.pofile(str(path))
+              if any(not e.msgstr.strip() and e.msgid.strip() for e in po):
+                  exit(0)
+          exit(1)
+          "; then
+            echo "has_empty_msgstr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_empty_msgstr=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download translation scripts from workflow repository
         run: curl -o "$RUNNER_TEMP/translate.py" https://raw.githubusercontent.com/newfold-labs/workflows/refs/heads/main/translations/translate.py
 
       - name: Translate PO and JSON files
+        if: steps.check-untranslated.outputs.has_empty_msgstr == 'true'
         env:
           TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
           TEXT_DOMAIN: ${{ inputs.text_domain }}
+          TRANSLATE_PO_WRAPWIDTH: ${{ inputs.po-wrapwidth }}
+          TRANSLATE_PO_NOWRAP: ${{ inputs.po-nowrap }}
         run: python "$RUNNER_TEMP/translate.py"
 
       - name: Remove downloaded translate script
-        run: rm "$RUNNER_TEMP/translate.py"
+        run: rm -f "$RUNNER_TEMP/translate.py"
 
+      # Run diff when translation occurs so the artifact receives translation changes. 
+      # When translation is skipped, artifact remains unchanged.
       - name: Create a diff file
+        if: steps.check-untranslated.outputs.has_empty_msgstr == 'true'
         run: |
           if ! git diff --quiet; then
             git diff > "$RUNNER_TEMP/updated-translations.diff"
