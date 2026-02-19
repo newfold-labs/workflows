@@ -2,8 +2,6 @@
 # Reusable workflow for running PHPUnit unit and Codeception wp-browser wpunit tests,
 # merging code coverage, committing HTML reports to GitHub Pages, and generating coverage badges.
 #
-# Example workflows: example-codecoverage.yml (run coverage); example-codecoverage-cleanup.yml (cleanup gh-pages).
-#
 # Example usage:
 #   uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage.yml@main
 #   with:
@@ -11,6 +9,20 @@
 #     coverage-php-version: '7.4'
 #     repository-name: 'wp-module-activation'
 #     minimum-coverage: 25
+#
+# Associated cleanup workflow (removes stale gh-pages/<sha>/ dirs, optional squash):
+#   uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
+#   with:
+#     shas: '["abc123","def456"]'   # optional; e.g. all commits from a merged PR
+#     prune_unreachable: true       # optional; remove dirs for unreachable commits
+#     squash_history: false         # optional; squash gh-pages to one commit
+#   secrets: inherit
+#
+# Example workflows:
+#   - example-codecoverage.yml — call this reusable on push/PR to run tests and publish coverage.
+#   - example-codecoverage-cleanup.yml — removes stale gh-pages/<sha>/ dirs (from merged PRs or deleted branches)
+#     and can squash gh-pages history; trigger on PR merge, branch delete, or schedule. Copy into your repo to use.
+#
 ##
 name: Reusable Code Coverage
 
