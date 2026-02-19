@@ -56,7 +56,31 @@ on:
 
 jobs:
 
+  check_gh_pages:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      has_gh_pages: ${{ steps.check.outputs.has_gh_pages }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Check if gh-pages branch exists
+        id: check
+        run: |
+          if git ls-remote --exit-code --heads origin gh-pages 2>/dev/null; then
+            echo "has_gh_pages=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_gh_pages=false" >> "$GITHUB_OUTPUT"
+            echo "gh-pages branch not found; skipping coverage job."
+          fi
+
   codecoverage:
+    needs: check_gh_pages
+    if: needs.check_gh_pages.outputs.has_gh_pages == 'true'
     runs-on: ubuntu-latest
     permissions:
       # Write access is needed to commit coverage reports to gh-pages branch
@@ -127,7 +151,7 @@ jobs:
           extensions: zip
 
       - name: Check for .env.testing.example
-        id: check-env-testing-example
+        id: check_env_testing_example
         run: |
           if [ -f ".env.testing.example" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -136,11 +160,11 @@ jobs:
           fi
 
       - name: Setup test environment
-        if: ${{ steps.check-env-testing-example.outputs.exists == 'true' }}
+        if: ${{ steps.check_env_testing_example.outputs.exists == 'true' }}
         run: cp .env.testing.example .env.testing
 
       - name: Read .env.testing
-        if: ${{ steps.check-env-testing-example.outputs.exists == 'true' }}
+        if: ${{ steps.check_env_testing_example.outputs.exists == 'true' }}
         uses: c-py/action-dotenv-to-setenv@925b5d99a3f1e4bd7b4e9928be4e2491e29891d9  # v5
         with:
           env-file: .env.testing
@@ -149,7 +173,7 @@ jobs:
         run: composer install -v
 
       - name: Check if wp-content directory exists
-        id: check-wp-content
+        id: check_wp_content
         run: |
           if [ -d "wp-content" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -158,7 +182,7 @@ jobs:
           fi
 
       - name: Allow writing to wp-content
-        if: ${{ steps.check-wp-content.outputs.exists == 'true' }}
+        if: ${{ steps.check_wp_content.outputs.exists == 'true' }}
         run: sudo chmod -R a+w wp-content
 
       # On main, there will be a previous coverage report. On PRs we create a new directory using the commit SHA.
@@ -169,7 +193,7 @@ jobs:
           mkdir gh-pages/phpunit || true;
 
       - name: Check if PHPUnit tests exist
-        id: check-unit-tests
+        id: check_unit_tests
         run: |
           if [ -d "tests/phpunit" ] && find tests/phpunit -name '*Test.php' -type f 2>/dev/null | grep -q .; then
             echo "has_tests=true" >> "$GITHUB_OUTPUT"
@@ -178,11 +202,11 @@ jobs:
           fi
 
       - name: Run PHPUnit tests
-        if: ${{ steps.check-unit-tests.outputs.has_tests == 'true' }}
+        if: ${{ steps.check_unit_tests.outputs.has_tests == 'true' }}
         run: XDEBUG_MODE=coverage vendor/bin/phpunit --bootstrap tests/phpunit/bootstrap.php --coverage-php tests/_output/unit.cov --debug
 
       - name: Check if WPUnit tests exist
-        id: check-wpunit-tests
+        id: check_wpunit_tests
         run: |
           if [ -d "tests/wpunit" ] && find tests/wpunit -name '*Test.php' -type f 2>/dev/null | grep -q .; then
             echo "has_tests=true" >> "$GITHUB_OUTPUT"
@@ -191,7 +215,7 @@ jobs:
           fi
 
       - name: Run WPUnit tests
-        if: ${{ steps.check-wpunit-tests.outputs.has_tests == 'true' }}
+        if: ${{ steps.check_wpunit_tests.outputs.has_tests == 'true' }}
         run: XDEBUG_MODE=coverage vendor/bin/codecept run wpunit --coverage tests/_output/wpunit.cov --debug
 
       - name: Run Integration tests
@@ -202,7 +226,7 @@ jobs:
       # Use the project-level <metrics> (has files="N") so we don't mix values from different elements (e.g. 100% from a class).
       - name: Get base branch coverage percentage
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
-        id: base-coverage
+        id: base_coverage
         run: |
           base_pct=""
           clover="gh-pages/phpunit/clover.xml"
@@ -246,7 +270,7 @@ jobs:
       - name: Check test coverage
         if: ${{ matrix.php == inputs.coverage-php-version }}
         uses: johanvanhelden/gha-clover-test-coverage-check@2543c79a701f179bd63aa14c16c6938c509b2cec  # v1
-        id: coverage-percentage
+        id: coverage_percentage
         with:
           percentage: ${{ inputs.minimum-coverage }}
           exit: false
@@ -274,7 +298,7 @@ jobs:
         with:
           repository: gh-pages
           branch: gh-pages
-          commit_message: ${{ format('🤖 Save code coverage report to gh-pages {0}%', steps.coverage-percentage.outputs.coverage-rounded) }}
+          commit_message: ${{ format('🤖 Save code coverage report to gh-pages {0}%', steps.coverage_percentage.outputs.coverage-rounded) }}
           commit_options: ""
         env:
           GITHUB_TOKEN: "${{ secrets.repo_token }}"
@@ -282,8 +306,8 @@ jobs:
       - name: Add coverage comparison to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         env:
-          BASE_COVERAGE: ${{ steps.base-coverage.outputs.base_coverage }}
-          PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+          BASE_COVERAGE: ${{ steps.base_coverage.outputs.base_coverage }}
+          PR_COVERAGE: ${{ steps.coverage_percentage.outputs.coverage-rounded }}
         run: |
           {
             if [ -z "$PR_COVERAGE" ]; then
@@ -321,7 +345,7 @@ jobs:
       - name: Add coverage report link to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         env:
-          PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+          PR_COVERAGE: ${{ steps.coverage_percentage.outputs.coverage-rounded }}
           REPO_NAME: ${{ inputs.repository-name }}
           PR_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -353,8 +377,8 @@ jobs:
           echo "$OUTPUT" >> coverage-comment.md
 
       - name: Add coverage PR comment
-        uses: mshick/add-pr-comment@b8f338c590a895d50bcbfa6c5859251edc8952fc  # v2.8.2
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
+        uses: mshick/add-pr-comment@b8f338c590a895d50bcbfa6c5859251edc8952fc  # v2.8.2
         continue-on-error: true  # When a PR is opened by a non-member, there are no write permissions (and no access to secrets), so this step will always fail.
         with:
           message-id: coverage-report
@@ -365,8 +389,8 @@ jobs:
       - name: Ensure coverage does not decrease
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         env:
-          BASE_COVERAGE: ${{ steps.base-coverage.outputs.base_coverage }}
-          PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+          BASE_COVERAGE: ${{ steps.base_coverage.outputs.base_coverage }}
+          PR_COVERAGE: ${{ steps.coverage_percentage.outputs.coverage-rounded }}
         run: |
           # Only compare when both are non-empty and numeric (allow decimals, e.g. 16.45)
           case "$BASE_COVERAGE" in

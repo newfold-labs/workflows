@@ -9,6 +9,8 @@
 #   - No need to pass repo_token unless you use a different token for gh-pages; GITHUB_TOKEN is used by default.
 #
 # For stricter code scanning (pinned refs), replace @main with a commit SHA from newfold-labs/workflows.
+#
+# This workflow is skipped in the newfold-labs/workflows repo (no gh-pages coverage here); it runs when copied to other repos.
 ##
 name: Code Coverage Cleanup (example)
 
@@ -23,7 +25,7 @@ on:
 # Permissions set per-job to avoid overly broad write at workflow level.
 jobs:
   get-merged-pr-commits:
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    if: github.repository != 'newfold-labs/workflows' && github.event_name == 'pull_request' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,7 +42,7 @@ jobs:
 
   cleanup-on-merge:
     needs: get-merged-pr-commits
-    if: always() && needs.get-merged-pr-commits.result == 'success'
+    if: github.repository != 'newfold-labs/workflows' && always() && needs.get-merged-pr-commits.result == 'success'
     permissions:
       contents: write
     uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
@@ -51,7 +53,7 @@ jobs:
     secrets: inherit
 
   cleanup-on-branch-delete:
-    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    if: github.repository != 'newfold-labs/workflows' && github.event_name == 'delete' && github.event.ref_type == 'branch'
     permissions:
       contents: write
     uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
@@ -62,7 +64,7 @@ jobs:
     secrets: inherit
 
   cleanup-scheduled:
-    if: github.event_name == 'schedule'
+    if: github.repository != 'newfold-labs/workflows' && github.event_name == 'schedule'
     permissions:
       contents: write
     uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
