@@ -1,0 +1,113 @@
+##
+# Reusable workflow to clean up stale code coverage directories on gh-pages and optionally squash branch history.
+#
+# Removes gh-pages/<sha>/ directories (one per commit that had coverage runs). Never touches gh-pages/phpunit/.
+#
+# Example usage (from a consumer repo that uses reusable-codecoverage):
+#   On PR merge: call with shas = all PR commit SHAs.
+#   On branch delete or schedule: call with prune_unreachable: true and optionally squash_history: true.
+#
+#   uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
+#   with:
+#     shas: '["abc123","def456"]'   # optional
+#     prune_unreachable: true       # optional
+#     squash_history: false         # optional
+##
+name: Reusable Code Coverage Cleanup
+
+on:
+  workflow_call:
+    inputs:
+      shas:
+        description: JSON array of commit SHAs whose gh-pages dirs to remove (e.g. all commits from a merged PR)
+        type: string
+        required: false
+      prune_unreachable:
+        description: If true, remove gh-pages/<sha>/ dirs for commits not reachable from any ref
+        type: boolean
+        default: false
+      squash_history:
+        description: If true, after cleanup replace gh-pages with a single orphan commit and force-push
+        type: boolean
+        default: false
+    secrets:
+      repo_token:
+        description: GitHub token for pushing to gh-pages (defaults to GITHUB_TOKEN if not set)
+        required: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository (all refs for reachability check)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Remove specific SHA directories
+        if: inputs.shas != ''
+        run: |
+          # Only remove dirs matching 40-char hex (safe)
+          for sha in $(echo '${{ inputs.shas }}' | jq -r '.[]'); do
+            if [ -n "$sha" ] && [ "${#sha}" -eq 40 ] && [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              if [ -d "gh-pages/$sha" ]; then
+                rm -rf "gh-pages/$sha"
+                echo "Removed gh-pages/$sha"
+              fi
+            fi
+          done
+
+      - name: Prune unreachable SHA directories
+        if: inputs.prune_unreachable
+        run: |
+          for dir in gh-pages/*/; do
+            [ -d "$dir" ] || continue
+            name=$(basename "$dir")
+            if [ "${#name}" -eq 40 ] && [[ "$name" =~ ^[0-9a-f]{40}$ ]]; then
+              if ! git branch -a --contains "$name" 2>/dev/null | grep -q .; then
+                rm -rf "gh-pages/$name"
+                echo "Pruned unreachable gh-pages/$name"
+              fi
+            fi
+          done
+
+      - name: Commit and push cleanup (no squash)
+        if: inputs.squash_history != true
+        working-directory: gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.repo_token || secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: remove stale code coverage directories"
+          git push origin gh-pages
+
+      - name: Squash gh-pages to single commit and force-push
+        if: inputs.squash_history
+        working-directory: gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.repo_token || secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Orphan commit keeps current tree (including any dir removals done above)
+          git checkout --orphan temp
+          git add -A
+          git commit -m "chore: code coverage (squashed)"
+          git branch -D gh-pages
+          git branch -m gh-pages
+          git push --force origin gh-pages

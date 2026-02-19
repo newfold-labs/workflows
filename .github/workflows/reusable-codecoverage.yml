@@ -2,6 +2,8 @@
 # Reusable workflow for running PHPUnit unit and Codeception wp-browser wpunit tests,
 # merging code coverage, committing HTML reports to GitHub Pages, and generating coverage badges.
 #
+# Example workflows: example-codecoverage.yml (run coverage); example-codecoverage-cleanup.yml (cleanup gh-pages).
+#
 # Example usage:
 #   uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage.yml@main
 #   with:

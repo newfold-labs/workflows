@@ -1,0 +1,68 @@
+##
+# Example workflow for consumer repos that use reusable-codecoverage.
+#
+# Copy this file into your repo at .github/workflows/ (e.g. codecoverage-cleanup.yml).
+# It triggers cleanup on PR merge, branch delete, and weekly schedule.
+#
+# Prerequisites:
+#   - Your repo uses newfold-labs/workflows reusable-codecoverage and has a gh-pages branch.
+#   - No need to pass repo_token unless you use a different token for gh-pages; GITHUB_TOKEN is used by default.
+##
+name: Code Coverage Cleanup (example)
+
+on:
+  pull_request:
+    types: [closed]
+  delete:
+  schedule:
+    # Weekly on Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  get-merged-pr-commits:
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      shas: ${{ steps.shas.outputs.list }}
+    steps:
+      - name: Get PR commit SHAs
+        id: shas
+        run: |
+          list=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/commits" --jq '[.[].sha] | @json') || list='[]'
+          [ -n "$list" ] || list='[]'
+          echo "list=${list}" >> "$GITHUB_OUTPUT"
+
+  cleanup-on-merge:
+    needs: get-merged-pr-commits
+    if: always() && needs.get-merged-pr-commits.result == 'success'
+    uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
+    with:
+      shas: ${{ needs.get-merged-pr-commits.outputs.shas }}
+      prune_unreachable: false
+      squash_history: false
+    secrets: inherit
+
+  cleanup-on-branch-delete:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
+    with:
+      shas: ''
+      prune_unreachable: true
+      squash_history: false
+    secrets: inherit
+
+  cleanup-scheduled:
+    if: github.event_name == 'schedule'
+    uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
+    with:
+      shas: ''
+      prune_unreachable: true
+      squash_history: true
+    secrets: inherit
