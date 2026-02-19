@@ -132,7 +132,7 @@ jobs:
         if: steps.check_pr.outputs.found == 'false' && steps.branch_check.outputs.exists == 'true'
         run: git push origin --delete "$PR_BRANCH_NAME"
 
-      # Required.
+      # Creates the auto-translate branch from the current ref so later jobs run on it.
       - name: Create a new branch with recent changes from the BASE
         id: create_branch
         run: git checkout -B "$PR_BRANCH_NAME"
@@ -170,14 +170,14 @@ jobs:
           ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: false
 
-      # Required.
+      # Provides PHP so Composer and i18n-ci-pre can run.
       - name: Set up PHP
         id: setup_php
         uses: shivammathur/setup-php@44454db4f0199b8b9685a5d763dc37cbf79108e1 # v2.36.0
         with:
           php-version: "8.0"
 
-      # Required.
+      # Installs Composer deps so i18n-ci-pre (and i18n-ci-post in a later job) can run.
       - name: Install Composer dependencies
         id: install_composer_deps
         uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
@@ -267,14 +267,14 @@ jobs:
         if: steps.download_patch.outcome == 'success'
         run: git apply "$RUNNER_TEMP/updated-translations.diff"
 
-      # Required.
+      # Provides Python so the untranslated check and translate script (polib, requests) can run.
       - name: Set up Python
         id: setup_python
         uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548  # v6.1.0
         with:
           python-version: '3.x'
 
-      # Required.
+      # Installs requests and polib for the PO scan and Azure translate script.
       - name: Install Python dependencies
         id: install_python_deps
         run: pip install requests polib
@@ -313,7 +313,7 @@ jobs:
           TRANSLATE_PO_NOWRAP: ${{ inputs.po-nowrap }}
         run: python "$RUNNER_TEMP/translate.py"
 
-      # Required.
+      # Removes the downloaded script; runs whether or not translate ran.
       - name: Remove downloaded translate script
         id: remove_script
         run: rm -f "$RUNNER_TEMP/translate.py"
@@ -383,13 +383,16 @@ jobs:
         if: steps.download_patch.outcome == 'success'
         run: git apply "$RUNNER_TEMP/updated-translations.diff"
 
-      # Required.
+      # Provides PHP so Composer and i18n-ci-post can run.
       - name: Set Up PHP
+        id: setup_php
         uses: shivammathur/setup-php@44454db4f0199b8b9685a5d763dc37cbf79108e1 # v2.36.0
         with:
           php-version: "8.0"
 
+      # Installs Composer deps so i18n-ci-post can run.
       - name: Install Composer dependencies
+        id: install_composer_deps
         uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
         with:
           composer-options: "--no-interaction --no-progress --prefer-dist"
@@ -408,19 +411,19 @@ jobs:
         if: inputs.i18n-script-location == 'npm'
         run: npm ci
 
-      # Required.
+      # Runs i18n-ci-post to build MO/JSON so WordPress can use the translated strings.
       - name: Run i18n-ci-post scripts
         id: run_i18n_post
         env:
           SCRIPT_LOCATION: ${{ inputs.i18n-script-location == 'npm' && 'npm' || 'composer' }}
         run: $SCRIPT_LOCATION run i18n-ci-post
 
-      # Required.
+      # Stages new language files so they are included in the diff and PR.
       - name: Add any new language files
         id: add_language_files
         run: git add -A languages/
 
-      # Required. Captures i18n-ci-post changes (e.g. generated MO/JSON).
+      # Captures i18n-ci-post changes (e.g. generated MO/JSON) for the artifact.
       - name: Create a diff file
         id: create_diff
         run: |
@@ -430,7 +433,7 @@ jobs:
             echo "::notice::No strings were missing from the POT or PO files."
           fi
 
-      # Required.
+      # Uploads the final diff so create-translation-pr can apply and commit it.
       - name: Save patch as an artifact
         id: upload_patch
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
@@ -497,7 +500,7 @@ jobs:
         if: steps.check_patch.outputs.has_patch == 'true'
         run: git apply "$RUNNER_TEMP/updated-translations.diff"
 
-      # Runs when there is a patch to commit.
+      # Sets Git user for the commit; needed so push succeeds.
       - name: Configure Git identity
         id: git_config
         if: steps.check_patch.outputs.has_patch == 'true'
@@ -505,19 +508,19 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
-      # Runs when there is a patch to commit.
+      # Stages all changes (patched files and new language files) for commit.
       - name: Stage changes
         id: stage
         if: steps.check_patch.outputs.has_patch == 'true'
         run: git add -A
 
-      # Runs when there is a patch to commit.
+      # Commits staged translation updates with a fixed message.
       - name: Commit changes
         id: commit
         if: steps.check_patch.outputs.has_patch == 'true'
         run: git commit -m "Apply all automated translation updates."
 
-      # Runs when there is a patch to commit.
+      # Pushes the commit to the auto-translate branch so the PR is updated or can be created.
       - name: Push changes
         id: push
         if: steps.check_patch.outputs.has_patch == 'true'
