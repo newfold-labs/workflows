@@ -14,7 +14,7 @@ name: Code Coverage Cleanup (example)
 
 on:
   pull_request:
-    types: [closed]
+    types: [ closed ]
   delete:
   schedule:
     # Weekly on Sunday at 00:00 UTC
