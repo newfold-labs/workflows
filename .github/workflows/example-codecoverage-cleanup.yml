@@ -7,6 +7,8 @@
 # Prerequisites:
 #   - Your repo uses newfold-labs/workflows reusable-codecoverage and has a gh-pages branch.
 #   - No need to pass repo_token unless you use a different token for gh-pages; GITHUB_TOKEN is used by default.
+#
+# For stricter code scanning (pinned refs), replace @main with a commit SHA from newfold-labs/workflows.
 ##
 name: Code Coverage Cleanup (example)
 
@@ -18,10 +20,7 @@ on:
     # Weekly on Sunday at 00:00 UTC
     - cron: '0 0 * * 0'
 
-permissions:
-  contents: write
-  pull-requests: read
-
+# Permissions set per-job to avoid overly broad write at workflow level.
 jobs:
   get-merged-pr-commits:
     if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
@@ -42,6 +41,8 @@ jobs:
   cleanup-on-merge:
     needs: get-merged-pr-commits
     if: always() && needs.get-merged-pr-commits.result == 'success'
+    permissions:
+      contents: write
     uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
     with:
       shas: ${{ needs.get-merged-pr-commits.outputs.shas }}
@@ -51,6 +52,8 @@ jobs:
 
   cleanup-on-branch-delete:
     if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    permissions:
+      contents: write
     uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
     with:
       shas: ''
@@ -60,6 +63,8 @@ jobs:
 
   cleanup-scheduled:
     if: github.event_name == 'schedule'
+    permissions:
+      contents: write
     uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
     with:
       shas: ''

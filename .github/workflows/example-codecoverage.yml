@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   codecoverage:
-    uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage.yml@main
+    uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage.yml@f0b26152e4ea40cd40429e06b1f30aa8879e7392
     with:
       php-versions: '["7.4", "8.0", "8.1", "8.2", "8.3", "8.4"]'
       coverage-php-version: '7.4'
