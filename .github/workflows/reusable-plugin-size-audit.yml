@@ -1,0 +1,295 @@
+name: Reusable Audit Plugin Size
+
+on:
+  workflow_call:
+env:
+  MAX_SIZE_INCREASE_PERCENT: 10
+  MAX_ZIP_SIZE_MB: 10
+
+jobs:
+  size-audit:
+    name: Audit Plugin Size
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # v2.35.5
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer, cs2pr
+
+      - name: Setup workflow context
+        id: workflow
+        working-directory: ${{ runner.temp }}
+        env:
+          REPO: ${{ github.repository }}
+          PLUGIN_NAME: ${{ vars.PLUGIN_NAME }}
+        run: |
+          mkdir dist
+          echo "DIST=${PWD}/dist" >> "$GITHUB_OUTPUT"
+          echo "PACKAGE=$PLUGIN_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Use Node from .nvmrc file
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .nvmrc
+      - name: Install Composer Dependencies
+        uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
+        with:
+          dependency-versions: 'locked'
+          composer-options: '--no-dev --optimize-autoloader --prefer-dist'
+
+      - name: Show versions
+        run: |
+          php --version
+          composer --version
+          node --version
+          npm --version
+
+      - name: Install NPM Dependencies
+        run: npm ci && rm -f .npmrc
+
+      - name: Build JavaScript
+        run: npm run build
+
+      - name: Prepare files
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
+        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . "$DIST"
+
+      - name: Calculate Total Plugin Size
+        id: plugin_size
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
+        run: |
+          TOTAL_SIZE_BYTES=$(du -sb "$DIST" | cut -f1)
+          TOTAL_SIZE_HUMAN=$(du -sh "$DIST" | cut -f1)
+          {
+            echo "total_size_bytes=${TOTAL_SIZE_BYTES}"
+            echo "total_size_human=${TOTAL_SIZE_HUMAN}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Create Zip
+        id: create_zip
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
+          PACKAGE: ${{ steps.workflow.outputs.PACKAGE }}
+        run: |
+          cd "$DIST"
+          zip -r "$PACKAGE.zip" .
+          echo "ZIP_PATH=$PACKAGE.zip" >> "${GITHUB_OUTPUT}"
+
+      - name: Calculate Zip Size
+        id: zip_size
+        env:
+          DIST: ${{ steps.workflow.outputs.DIST }}
+          PACKAGE: ${{ steps.workflow.outputs.PACKAGE }}
+          ZIP_PATH: ${{ steps.create_zip.outputs.ZIP_PATH }}
+        run: |
+          cd "$DIST"
+          SIZE_HUMAN=$(du -sh "$ZIP_PATH" | cut -f1)
+          SIZE_BYTES=$(du -sb "$ZIP_PATH" | cut -f1)
+          echo "::notice file=${ZIP_PATH}::Zip file created with size: ${SIZE_HUMAN} (${SIZE_BYTES} bytes)"
+          if [ "$SIZE_BYTES" -gt $(( ${{ env.MAX_ZIP_SIZE_MB }} * 1024 * 1024 )) ]; then
+            echo "::error file=${ZIP_PATH}::Zip file size ${SIZE_HUMAN} exceeds the maximum allowed size of ${{ env.MAX_ZIP_SIZE_MB }} MB."
+            echo "FAILED=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "FAILED=false" >> "${GITHUB_OUTPUT}"
+          fi
+          {
+            echo "SIZE_HUMAN=${SIZE_HUMAN}"
+            echo "SIZE_BYTES=${SIZE_BYTES}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Retrieve Base Branch
+        if: github.event_name == 'pull_request'
+        id: get_base_ref
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          echo "BASE_REF=$BASE_REF" >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout Repository for Base Branch
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ steps.get_base_ref.outputs.BASE_REF }}
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ env.BASE_REF }}
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+          clean: true
+
+      - name: Setup workflow context for Base Branch
+        if: github.event_name == 'pull_request'
+        id: workflow-base
+        working-directory: ${{ runner.temp }}
+        env:
+          REPO: ${{ github.repository }}
+          PLUGIN_NAME: ${{ vars.PLUGIN_NAME }}
+        run: |
+          mkdir dist_base
+          echo "DIST=${PWD}/dist_base" >> "$GITHUB_OUTPUT"
+          echo "PACKAGE=$PLUGIN_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Install PHP Dependencies for base branch
+        if: github.event_name == 'pull_request'
+        uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
+        with:
+          dependency-versions: 'locked'
+          composer-options: '--no-dev --optimize-autoloader --prefer-dist'
+
+      - name: NPM Install for Base Branch
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.event_name == 'pull_request'
+        run: npm ci --ignore-scripts
+
+      - name: Build JavaScript for Base Branch
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.event_name == 'pull_request'
+        run: npm run build
+
+      - name: Prepare files for Base Branch
+        if: github.event_name == 'pull_request'
+        env:
+          DIST: ${{ steps.workflow-base.outputs.DIST }}
+        run: rsync -r --include-from=.distinclude --exclude-from=.distignore . "$DIST"
+
+      - name: Calculate Total Plugin Size for Base Branch
+        if: github.event_name == 'pull_request'
+        id: base_plugin_size
+        env:
+          DIST: ${{ steps.workflow-base.outputs.DIST }}
+        run: |
+          TOTAL_SIZE_BYTES=$(du -sb "$DIST" | cut -f1)
+          TOTAL_SIZE_HUMAN=$(du -sh "$DIST" | cut -f1)
+          {
+            echo "base_total_size_bytes=${TOTAL_SIZE_BYTES}"
+            echo "base_total_size_human=${TOTAL_SIZE_HUMAN}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Compare Plugin Sizes
+        id: compare_plugin_sizes
+        if: github.event_name == 'pull_request'
+        env:
+          CURRENT_SIZE_BYTES: ${{ steps.plugin_size.outputs.total_size_bytes }}
+          BASE_SIZE_BYTES: ${{ steps.base_plugin_size.outputs.base_total_size_bytes }}
+          MAX_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
+        run: |
+          SIZE_DIFF=$((CURRENT_SIZE_BYTES - BASE_SIZE_BYTES))
+          if [ "$BASE_SIZE_BYTES" -eq 0 ]; then
+            PERCENT_INCREASE=0
+          else
+            PERCENT_INCREASE=$((SIZE_DIFF * 100 / BASE_SIZE_BYTES))
+          fi
+          echo "Size Difference (Bytes): $SIZE_DIFF"
+          echo "Percentage Increase: $PERCENT_INCREASE%"
+          if [ "$PERCENT_INCREASE" -gt "$MAX_INCREASE_PERCENT" ]; then
+            echo "::error::Plugin size increased by $PERCENT_INCREASE%, which exceeds the maximum allowed increase of $MAX_INCREASE_PERCENT%."
+            echo "FAILED=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "FAILED=false" >> "${GITHUB_OUTPUT}"
+          fi
+          echo "PERCENT_INCREASE=${PERCENT_INCREASE}" >> "${GITHUB_OUTPUT}"
+          echo "SIZE_DIFF=${SIZE_DIFF}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate Size Audit Report
+        if: github.event_name == 'pull_request'
+        env:
+          TOTAL_SIZE_HUMAN: ${{ steps.plugin_size.outputs.total_size_human }}
+          BASE_TOTAL_SIZE_HUMAN: ${{ steps.base_plugin_size.outputs.base_total_size_human }}
+          ZIP_SIZE_HUMAN: ${{ steps.zip_size.outputs.SIZE_HUMAN }}
+          PERCENT_INCREASE: ${{ steps.compare_plugin_sizes.outputs.PERCENT_INCREASE }}
+          SIZE_DIFF: ${{ steps.compare_plugin_sizes.outputs.SIZE_DIFF }}
+          FAILED_PERCENT: ${{ steps.compare_plugin_sizes.outputs.FAILED }}
+          ZIP_FAILED: ${{ steps.zip_size.outputs.FAILED }}
+          MAX_SIZE_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
+          MAX_ZIP_SIZE_MB: ${{ env.MAX_ZIP_SIZE_MB }}
+        run: |
+          REPORT="final-report.md"
+          {
+            echo "## Plugin Size Audit: Folder and Zip Report"
+            echo ""
+            echo "### Total Plugin Size"
+            echo "- **Current branch size:** ${TOTAL_SIZE_HUMAN}"
+            echo "- **Base branch size:** ${BASE_TOTAL_SIZE_HUMAN}"
+            echo "- **Size difference:** ${SIZE_DIFF} bytes"
+            echo "- **Percentage change:** ${PERCENT_INCREASE}%"
+            echo "- **Zip file size:** ${ZIP_SIZE_HUMAN}"
+            echo ""
+
+            if [ "${FAILED_PERCENT}" = "true" ] || [ "${ZIP_FAILED}" = "true" ]; then
+
+                if [ "${FAILED_PERCENT}" = "true" ]; then
+                    echo "⚠️ **Warning (Increase):** Plugin size increased by ${PERCENT_INCREASE}%, exceeding the maximum allowed increase of ${MAX_SIZE_INCREASE_PERCENT}%."
+                fi
+
+                if [ "${ZIP_FAILED}" = "true" ]; then
+                    echo "⚠️ **Warning (Max Size):** The total ZIP file size (${ZIP_SIZE_HUMAN}) exceeds the maximum allowed limit of ${MAX_ZIP_SIZE_MB}MB."
+                fi
+
+            else
+                echo "✅ Plugin size change and total ZIP size are within acceptable limits."
+            fi
+          } > "${REPORT}"
+
+      - name: Comment PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('final-report.md', 'utf8');
+
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existingComment = comments.data.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('## Plugin Size Audit: Folder and Zip Report')
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: report
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: report
+              });
+            }
+
+      - name: Fail if size limits are exceeded
+        if: github.event_name == 'pull_request' && ( steps.compare_plugin_sizes.outputs.FAILED == 'true' || steps.zip_size.outputs.FAILED == 'true' )
+        env:
+          MAX_SIZE_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
+          PERCENT_INCREASE: ${{ steps.compare_plugin_sizes.outputs.PERCENT_INCREASE }}
+          MAX_ZIP_SIZE_MB: ${{ env.MAX_ZIP_SIZE_MB }}
+          FAILED_PERCENT: ${{ steps.compare_plugin_sizes.outputs.FAILED }}
+          FAILED_ZIP: ${{ steps.zip_size.outputs.FAILED }}
+        run: |
+          if [ "$FAILED_PERCENT" == "true" ]; then
+            echo "::error::Plugin size increased by ${PERCENT_INCREASE}%, exceeding the ${MAX_SIZE_INCREASE_PERCENT}% limit."
+          fi
+          if [ "$FAILED_ZIP" == "true" ]; then
+            echo "::error::Total ZIP size exceeded the limit of ${MAX_ZIP_SIZE_MB}MB."
+          fi
+          exit 1
