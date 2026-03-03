@@ -17,12 +17,12 @@ msgstr ""
 
 #: test-translations.php:3
 msgid "This is a test string for translation."
-msgstr ""
+msgstr "C’est une chaîne de test pour la traduction."
 
 #: test-translations.php:4
 msgid "The i18n scripts should detect these as translatable."
-msgstr ""
+msgstr "Les scripts i18n devraient détecter ces éléments comme traduisibles."
 
 #: test-translations.php:5
 msgid "The translation workflow should attempt to translate these."
-msgstr ""
+msgstr "Le flux de traduction devrait tenter de les traduire."
