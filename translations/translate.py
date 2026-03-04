@@ -6,6 +6,15 @@ import polib
 from pathlib import Path
 
 TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
+# When saving PO files, polib only supports one formatting option: wrapwidth.
+# - TRANSLATE_PO_WRAPWIDTH: max line length (default 77). Used only when TRANSLATE_PO_NOWRAP is not set.
+# - TRANSLATE_PO_NOWRAP: if set (e.g. "1" or "true"), use wrapwidth=0 so long msgid/msgstr are not
+#   broken across lines. 
+#   Note: polib always joins reference comments (#: file:line) with spaces;
+#   with nowrap they become one long line; with wrapping it puts multiple refs per line up to wrapwidth.
+#   Polib does not support "one #: per line".
+PO_NOWRAP = os.getenv("TRANSLATE_PO_NOWRAP", "").lower() in ("1", "true", "yes")
+PO_WRAPWIDTH = 0 if PO_NOWRAP else int(os.getenv("TRANSLATE_PO_WRAPWIDTH", "77"))
 
 def extract_lang_from_filename(filename):
     pattern = fr'{re.escape(TEXT_DOMAIN)}-([a-z]{{2,3}}(?:_[A-Z]{{2}})?)'
@@ -56,7 +65,7 @@ def translate_entries(entries, get_id_context, apply_translation, lang):
         translated = strip_context_from_translation(translated) if had_context else translated.strip()
         apply_translation(entry, translated)
 
-# Translate .po files
+# Translate .po files (only save when we actually translate something to avoid formatting-only diffs)
 for path in Path('languages').rglob('*.po'):
     lang = extract_lang_from_filename(path.name)
     print(f"Language detected: {lang}")
@@ -64,8 +73,11 @@ for path in Path('languages').rglob('*.po'):
         continue
 
     print(f"Processing file: {path}")
-    po = polib.pofile(str(path))
+    po = polib.pofile(str(path), wrapwidth=PO_WRAPWIDTH)
     entries_to_translate = [entry for entry in po if not entry.msgstr.strip() and entry.msgid.strip()]
+
+    if not entries_to_translate:
+        continue
 
     def get_po_id_context(entry):
         return entry.msgid, entry.msgctxt
