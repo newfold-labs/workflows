@@ -2,9 +2,17 @@ name: Reusable Audit Plugin Size
 
 on:
   workflow_call:
-env:
-  MAX_SIZE_INCREASE_PERCENT: 10
-  MAX_ZIP_SIZE_MB: 10
+    inputs:
+      MAX_SIZE_INCREASE_PERCENT:
+        description: 'Maximum allowed percentage increase in plugin size before the workflow fails.'
+        required: false
+        type: number
+        default: 10
+      MAX_ZIP_SIZE_MB:
+        description: 'Maximum allowed ZIP file size in MB before the workflow fails.'
+        required: false
+        type: number
+        default: 10
 
 jobs:
   size-audit:
@@ -100,8 +108,8 @@ jobs:
           SIZE_HUMAN=$(du -sh "$ZIP_PATH" | cut -f1)
           SIZE_BYTES=$(du -sb "$ZIP_PATH" | cut -f1)
           echo "::notice file=${ZIP_PATH}::Zip file created with size: ${SIZE_HUMAN} (${SIZE_BYTES} bytes)"
-          if [ "$SIZE_BYTES" -gt $(( ${{ env.MAX_ZIP_SIZE_MB }} * 1024 * 1024 )) ]; then
-            echo "::error file=${ZIP_PATH}::Zip file size ${SIZE_HUMAN} exceeds the maximum allowed size of ${{ env.MAX_ZIP_SIZE_MB }} MB."
+          if [ "$SIZE_BYTES" -gt $(( ${{ inputs.MAX_ZIP_SIZE_MB }} * 1024 * 1024 )) ]; then
+            echo "::error file=${ZIP_PATH}::Zip file size ${SIZE_HUMAN} exceeds the maximum allowed size of ${{ inputs.MAX_ZIP_SIZE_MB }} MB."
             echo "FAILED=true" >> "${GITHUB_OUTPUT}"
           else
             echo "FAILED=false" >> "${GITHUB_OUTPUT}"
@@ -183,7 +191,7 @@ jobs:
         env:
           CURRENT_SIZE_BYTES: ${{ steps.plugin_size.outputs.total_size_bytes }}
           BASE_SIZE_BYTES: ${{ steps.base_plugin_size.outputs.base_total_size_bytes }}
-          MAX_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
+          MAX_SIZE_INCREASE_PERCENT: ${{ inputs.MAX_SIZE_INCREASE_PERCENT }}
         run: |
           SIZE_DIFF=$((CURRENT_SIZE_BYTES - BASE_SIZE_BYTES))
           if [ "$BASE_SIZE_BYTES" -eq 0 ]; then
@@ -193,8 +201,8 @@ jobs:
           fi
           echo "Size Difference (Bytes): $SIZE_DIFF"
           echo "Percentage Increase: $PERCENT_INCREASE%"
-          if [ "$PERCENT_INCREASE" -gt "$MAX_INCREASE_PERCENT" ]; then
-            echo "::error::Plugin size increased by $PERCENT_INCREASE%, which exceeds the maximum allowed increase of $MAX_INCREASE_PERCENT%."
+          if [ "$PERCENT_INCREASE" -gt "$MAX_SIZE_INCREASE_PERCENT" ]; then
+            echo "::error::Plugin size increased by $PERCENT_INCREASE%, which exceeds the maximum allowed increase of $MAX_SIZE_INCREASE_PERCENT%."
             echo "FAILED=true" >> "${GITHUB_OUTPUT}"
           else
             echo "FAILED=false" >> "${GITHUB_OUTPUT}"
@@ -212,8 +220,8 @@ jobs:
           SIZE_DIFF: ${{ steps.compare_plugin_sizes.outputs.SIZE_DIFF }}
           FAILED_PERCENT: ${{ steps.compare_plugin_sizes.outputs.FAILED }}
           ZIP_FAILED: ${{ steps.zip_size.outputs.FAILED }}
-          MAX_SIZE_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
-          MAX_ZIP_SIZE_MB: ${{ env.MAX_ZIP_SIZE_MB }}
+          MAX_SIZE_INCREASE_PERCENT: ${{ inputs.MAX_SIZE_INCREASE_PERCENT }}
+          MAX_ZIP_SIZE_MB: ${{ inputs.MAX_ZIP_SIZE_MB }}
         run: |
           REPORT="final-report.md"
           {
@@ -250,13 +258,13 @@ jobs:
             const fs = require('fs');
             const report = fs.readFileSync('final-report.md', 'utf8');
 
-            const comments = await github.rest.issues.listComments({
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
 
-            const existingComment = comments.data.find(comment =>
+            const existingComment = comments.find(comment =>
               comment.user.type === 'Bot' &&
               comment.body.includes('## Plugin Size Audit: Folder and Zip Report')
             );
@@ -280,9 +288,9 @@ jobs:
       - name: Fail if size limits are exceeded
         if: github.event_name == 'pull_request' && ( steps.compare_plugin_sizes.outputs.FAILED == 'true' || steps.zip_size.outputs.FAILED == 'true' )
         env:
-          MAX_SIZE_INCREASE_PERCENT: ${{ env.MAX_SIZE_INCREASE_PERCENT }}
+          MAX_SIZE_INCREASE_PERCENT: ${{ inputs.MAX_SIZE_INCREASE_PERCENT }}
           PERCENT_INCREASE: ${{ steps.compare_plugin_sizes.outputs.PERCENT_INCREASE }}
-          MAX_ZIP_SIZE_MB: ${{ env.MAX_ZIP_SIZE_MB }}
+          MAX_ZIP_SIZE_MB: ${{ inputs.MAX_ZIP_SIZE_MB }}
           FAILED_PERCENT: ${{ steps.compare_plugin_sizes.outputs.FAILED }}
           FAILED_ZIP: ${{ steps.zip_size.outputs.FAILED }}
         run: |
