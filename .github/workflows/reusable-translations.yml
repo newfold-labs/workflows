@@ -180,7 +180,7 @@ jobs:
       # Installs Composer deps so i18n-ci-pre (and i18n-ci-post in a later job) can run.
       - name: Install Composer dependencies
         id: install_composer_deps
-        uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
+        uses: ramsey/composer-install@a35c6ebd3d08125aaf8852dff361e686a1a67947 # v3.2.0
         with:
           composer-options: "--no-interaction --no-progress --prefer-dist"
 
@@ -393,7 +393,7 @@ jobs:
       # Installs Composer deps so i18n-ci-post can run.
       - name: Install Composer dependencies
         id: install_composer_deps
-        uses: ramsey/composer-install@3cf229dc2919194e9e36783941438d17239e8520 # v3.1.1
+        uses: ramsey/composer-install@a35c6ebd3d08125aaf8852dff361e686a1a67947 # v3.2.0
         with:
           composer-options: "--no-interaction --no-progress --prefer-dist"
 
