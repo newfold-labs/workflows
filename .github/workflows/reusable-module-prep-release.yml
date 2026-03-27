@@ -35,6 +35,11 @@ on:
         type: string
         default: 'bootstrap.php'
         required: false
+      composer-file:
+        description: Path to composer.json. When set and the file defines a "version" field, that value is bumped to match the release. Set empty to skip.
+        type: string
+        default: 'composer.json'
+        required: false
 
 # Disable permissions for all available scopes by default.
 # Any needed permissions should be configured at the job level.
@@ -45,6 +50,7 @@ jobs:
   #
   # It does the following:
   # - Bumps the version as specified in the input
+  # - Syncs composer.json "version" when present (matches package.json bump)
   # - Prepares build artifacts
   # - Creates a release branch
   # - Commits the changes
@@ -129,6 +135,56 @@ jobs:
           fi
 
           echo "version=${RAW_VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Check composer.json for version field
+        id: composer_version_check
+        if: ${{ inputs.json-file != '' && inputs.composer-file != '' }}
+        env:
+          COMPOSER_FILE: ${{ inputs.composer-file }}
+        run: |
+          set -e
+          if [ ! -f "$COMPOSER_FILE" ]; then
+            echo "has_version=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::composer file not found at ${COMPOSER_FILE}, skipping composer version sync."
+            exit 0
+          fi
+
+          HAS_VERSION=$(node -e "
+            const fs = require('fs');
+            const p = process.env.COMPOSER_FILE;
+            const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+            const v = j.version;
+            process.stdout.write(
+              v !== undefined && v !== null && String(v).trim() !== '' ? 'true' : 'false'
+            );
+          ")
+
+          echo "has_version=${HAS_VERSION}" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_VERSION" = "true" ]; then
+            echo "::notice::composer.json defines a version field; it will be synced to the new release version."
+          else
+            echo "::notice::composer file found at ${COMPOSER_FILE}, but no \"version\" field (or it is empty). Skipping composer version update."
+          fi
+
+      - name: Update version in composer.json
+        id: composer_version_update
+        if: ${{ inputs.json-file != '' && inputs.composer-file != '' && steps.composer_version_check.outputs.has_version == 'true' }}
+        env:
+          COMPOSER_FILE: ${{ inputs.composer-file }}
+          NEW_VERSION: ${{ steps.new.outputs.version }}
+        run: |
+          set -e
+          COMPOSER_DIR=$(dirname "$COMPOSER_FILE")
+          (cd "$COMPOSER_DIR" && composer config version "$NEW_VERSION")
+
+          # Refresh lock file hash so composer.json (including version) and composer.lock stay in sync.
+          if [ -f "${COMPOSER_DIR}/composer.lock" ]; then
+            (cd "$COMPOSER_DIR" && composer update --lock --no-install --no-interaction)
+          else
+            echo "::notice::No composer.lock beside ${COMPOSER_FILE}; skipping lock refresh after version bump."
+          fi
+
+          echo "message=✅ Synced \`${{ inputs.composer-file }}\` version to ${NEW_VERSION} and refreshed \`composer.lock\` (or skipped if no lock file)" >> "$GITHUB_OUTPUT"
 
       - name: Update version in PHP file
         if: ${{ inputs.php-file != '' }}
@@ -251,6 +307,7 @@ jobs:
           POST_SET_VERSION_MESSAGE: ${{ steps.run-post-set-version.outputs.message }}
           BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
           I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
+          COMPOSER_VERSION_MESSAGE: ${{ steps.composer_version_update.outputs.message }}
           MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
           RELEASE_LEVEL: ${{ inputs.level }}
           MODULE_TARGET_BRANCH: ${{ inputs.module-branch }}
@@ -259,6 +316,7 @@ jobs:
           PR_BODY="$({
             echo "## Changes in this pull request"
             echo "- Bumped version from \`${OLD_VERSION}\` to \`${NEW_VERSION}\`"
+            if [ -n "${COMPOSER_VERSION_MESSAGE}" ]; then echo "- ${COMPOSER_VERSION_MESSAGE}"; fi
             echo "- ${POST_SET_VERSION_MESSAGE}"
             echo "- ${BUILD_OUTPUT_MESSAGE}"
             echo "- ${I18N_OUTPUT_MESSAGE}"
@@ -285,6 +343,7 @@ jobs:
           POST_SET_VERSION_MESSAGE: ${{ steps.run-post-set-version.outputs.message }}
           BUILD_OUTPUT_MESSAGE: ${{ steps.run-build.outputs.message }}
           I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
+          COMPOSER_VERSION_MESSAGE: ${{ steps.composer_version_update.outputs.message }}
           MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
           PR_URL: ${{ steps.create_pr.outputs.pr_url }}
         run: |
@@ -299,6 +358,7 @@ jobs:
             echo "${MERGED_PRS}"
             echo ""
             echo "### Notes"
+            if [ -n "${COMPOSER_VERSION_MESSAGE}" ]; then echo "${COMPOSER_VERSION_MESSAGE}"; fi
             echo "${POST_SET_VERSION_MESSAGE}"
             echo "${BUILD_OUTPUT_MESSAGE}"
             echo "${I18N_OUTPUT_MESSAGE}"
