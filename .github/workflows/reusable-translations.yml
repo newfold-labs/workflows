@@ -26,8 +26,8 @@
 #   po-wrapwidth (optional, default: 77)
 #     Line wrap width when the Python script saves PO files (gettext-style). Only used when the translate script actually writes a file; ignored when po-nowrap is true. Use to match your gettext/xgettext wrap width and reduce formatting-only diffs.
 #
-#   po-nowrap (optional, default: false)
-#     If true, the Python script saves PO files with no line wrapping (each msgid/msgstr on one line). Reduces formatting-only diffs. Reference comments (#:) may be output as one long line (polib limitation).
+#   po-nowrap (optional, default: true)
+#     When true (default), the Python script saves PO files with no line wrapping (wrapwidth 0). Set false to wrap at po-wrapwidth. Reference comments (#:) may be one long line when nowrap (polib limitation).
 #
 # Secrets:
 #   TRANSLATOR_API_KEY (required)
@@ -61,7 +61,7 @@ on:
         description: 'If true, do not wrap long msgid/msgstr (one line each). Reduces formatting-only diffs; refs (#:) may become one long line (polib limitation).'
         required: false
         type: boolean
-        default: false
+        default: true
 
     secrets:
       TRANSLATOR_API_KEY:
