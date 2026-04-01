@@ -183,14 +183,14 @@ jobs:
       # Provides PHP so Composer and i18n-ci-pre can run.
       - name: Set up PHP
         id: setup_php
-        uses: shivammathur/setup-php@44454db4f0199b8b9685a5d763dc37cbf79108e1 # v2.36.0
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
         with:
           php-version: "8.0"
 
       # Installs Composer deps so i18n-ci-pre (and i18n-ci-post in a later job) can run.
       - name: Install Composer dependencies
         id: install_composer_deps
-        uses: ramsey/composer-install@a35c6ebd3d08125aaf8852dff361e686a1a67947 # v3.2.0
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
         with:
           composer-options: "--no-interaction --no-progress --prefer-dist"
 
@@ -413,14 +413,14 @@ jobs:
       # Provides PHP so Composer and i18n-ci-post can run.
       - name: Set Up PHP
         id: setup_php
-        uses: shivammathur/setup-php@44454db4f0199b8b9685a5d763dc37cbf79108e1 # v2.36.0
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
         with:
           php-version: "8.0"
 
       # Installs Composer deps so i18n-ci-post can run.
       - name: Install Composer dependencies
         id: install_composer_deps
-        uses: ramsey/composer-install@a35c6ebd3d08125aaf8852dff361e686a1a67947 # v3.2.0
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
         with:
           composer-options: "--no-interaction --no-progress --prefer-dist"
 
