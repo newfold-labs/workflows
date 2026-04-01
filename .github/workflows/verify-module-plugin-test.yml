@@ -7,11 +7,11 @@ on:
       - main
       - develop
     paths:
-      - '**module-plugin-test.yml'
+      - '**module-plugin-test-playwright.yml'
   pull_request:
     types: [ opened, edited, synchronize, reopened, ready_for_review ]
     paths:
-      - '**module-plugin-test.yml'
+      - '**module-plugin-test-playwright.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
@@ -49,9 +49,6 @@ jobs:
           - brand: 'hostgator'
             name: 'HostGator'
             plugin-repo: 'newfold-labs/wp-plugin-hostgator'
-          - brand: 'web.com'
-            name: 'Web.com'
-            plugin-repo: 'newfold-labs/wp-plugin-web'
 
           # Include one job for each brand plugin that runs all tests.
           - brand: 'bluehost'
@@ -63,11 +60,6 @@ jobs:
             name: 'HostGator'
             plugin-repo: 'newfold-labs/wp-plugin-hostgator'
             module: 'global-ctb'
-            only-module-tests: false
-          - brand: 'web.com'
-            name: 'Web.com'
-            plugin-repo: 'newfold-labs/wp-plugin-web'
-            module: 'notifications'
             only-module-tests: false
 
           # Include one job for each brand plugin that runs with a secondary module.
@@ -82,12 +74,6 @@ jobs:
             plugin-repo: 'newfold-labs/wp-plugin-hostgator'
             module: 'help-center'
             secondary-module-repo: 'migration'
-            only-module-tests: true
-          - brand: 'web.com'
-            name: 'Web.com'
-            plugin-repo: 'newfold-labs/wp-plugin-web'
-            module: 'notifications'
-            secondary-module-repo: 'performance'
             only-module-tests: true
 
           # Include one job for each brand plugin with a module lacking Cypress tests.
@@ -115,23 +101,19 @@ jobs:
             plugin-repo: 'newfold-labs/wp-plugin-hostgator'
             module: 'facebook'
             only-module-tests: false
-          - brand: 'web.com'
-            name: 'Web.com'
-            plugin-repo: 'newfold-labs/wp-plugin-web'
-            module: 'secure-passwords'
-            only-module-tests: false
 
           # Include one job for each retired brand plugin.
-          - brand: 'crazydomains'
-            name: 'Crazy Domains'
-            plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
-            module: 'performance'
-            only-module-tests: true
-          - brand: 'mojo'
-            name: 'Mojo'
-            plugin-repo: 'newfold-labs/wp-plugin-mojo'
-            module: 'coming-soon'
-            only-module-tests: true
+          # These retired brand plugins still use Cypress tests, but we've migrated to Playwright.
+          # - brand: 'crazydomains'
+          #   name: 'Crazy Domains'
+          #   plugin-repo: 'newfold-labs/wp-plugin-crazy-domains'
+          #   module: 'performance'
+          #   only-module-tests: true
+          # - brand: 'mojo'
+          #   name: 'Mojo'
+          #   plugin-repo: 'newfold-labs/wp-plugin-mojo'
+          #   module: 'coming-soon'
+          #   only-module-tests: true
 
         exclude:
           # The Web.com plugin currently excludes tests for the coming-soon module in its test configuration.
@@ -139,8 +121,28 @@ jobs:
           # See https://github.com/newfold-labs/wp-plugin-web/blob/main/cypress.config.js#L87.
           - brand: 'web.com'
             module: 'coming-soon'
+          # The Web.com plugin still uses Cypress tests, but we've migrated to Playwright.
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+            module: 'notifications'
+            secondary-module-repo: 'performance'
+            only-module-tests: true
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+            module: 'secure-passwords'
+            only-module-tests: false
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+            module: 'notifications'
+            only-module-tests: false
 
-    uses: ./.github/workflows/module-plugin-test.yml
+    uses: ./.github/workflows/module-plugin-test-playwright.yml
     with:
       plugin-repo: ${{ matrix.plugin-repo }}
       module-repo: newfold-labs/wp-module-${{ matrix.module }}
