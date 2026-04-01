@@ -3,10 +3,35 @@
 # By default, this workflow will attempt to translate untranslated strings using the Azure AI translation service.
 #
 # This workflow assumes the following:
+# - Translation catalogs live under `languages/` (`.po` and `.pot`). After `i18n-ci-pre`, PO/POT files are normalized
+#   with GNU gettext `msgcat` (stable sort, no wrap) so diffs stay string-focused. Azure translation and PR steps run
+#   only when `msgfmt --statistics` reports at least one untranslated message in a `.po` file.
+# - Optional inputs `po-wrapwidth` and `po-nowrap` control how the Python translate script writes PO files when it runs
+#   (match local gettext/xgettext to reduce formatting-only diffs).
 # - The calling repository has a `i18n`, `i18n-ci-pre`, `i18n-ci-post` in the `composer.json` file.
 # - If there are additional scripts that must be run when processing translations for some reason, then the
 #   `package.json` file must also contain the `i18n`, `i18n-ci-pre`, and `i18n-ci-post` scripts. They should run the
 #   corresponding Composer scripts, plus any other necessary scripts.
+#
+# Inputs:
+#   text_domain (required)
+#     Text domain for translation (e.g. plugin or theme slug).
+#
+#   run-azure-ai-translate (optional, default: true)
+#     Whether to run the Azure AI translation step. Set false to only run i18n-ci-pre / i18n-ci-post and open PRs for those changes.
+#
+#   i18n-script-location (optional, default: 'composer')
+#     Where i18n scripts are run from. Use "npm" if the repo runs i18n via package.json (e.g. @wordpress/scripts).
+#
+#   po-wrapwidth (optional, default: 77)
+#     Line wrap width when the Python script saves PO files (gettext-style). Only used when the translate script actually writes a file; ignored when po-nowrap is true. Use to match your gettext/xgettext wrap width and reduce formatting-only diffs.
+#
+#   po-nowrap (optional, default: true)
+#     When true (default), the Python script saves PO files with no line wrapping (wrapwidth 0). Set false to wrap at po-wrapwidth. Reference comments (#:) may be one long line when nowrap (polib limitation).
+#
+# Secrets:
+#   TRANSLATOR_API_KEY (required)
+#     Azure Translator (Cognitive Services) API key for the translate script.
 #
 name: Reusable Translation Workflow
 
@@ -27,6 +52,16 @@ on:
         required: false
         type: string
         default: 'composer'
+      po-wrapwidth:
+        description: 'Line wrap width when saving PO files (default 77, match gettext). Ignored when po-nowrap is true.'
+        required: false
+        type: number
+        default: 77
+      po-nowrap:
+        description: 'If true, do not wrap long msgid/msgstr (one line each). Reduces formatting-only diffs; refs (#:) may become one long line (polib limitation).'
+        required: false
+        type: boolean
+        default: true
 
     secrets:
       TRANSLATOR_API_KEY:
@@ -59,10 +94,12 @@ jobs:
 
     steps:
       - name: Checkout repository
+        id: checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
         with:
           persist-credentials: true
 
+      # Required. Outputs pr number or "false".
       - name: Check for an existing pull request
         id: check_pr
         env:
@@ -76,10 +113,9 @@ jobs:
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # When the branch already exists remotely without a corresponding pull request, it should be deleted to ensure
-      # that the pull request can be cleanly merged with all changes from the `BASE` branch present.
+      # Runs when no open translations PR exists. Outputs exists=true/false.
       - name: Check if branch already exists remotely
-        id: branch-check
+        id: branch_check
         if: steps.check_pr.outputs.found == 'false'
         run: |
           if git ls-remote --exit-code --heads origin "$PR_BRANCH_NAME"; then
@@ -88,6 +124,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Runs when an open translations PR already exists.
       - name: Update the HEAD branch of a pre-existing pull request
         if: steps.check_pr.outputs.found != 'false'
         env:
@@ -95,13 +132,19 @@ jobs:
           REF_NAME: ${{ 'pull_request' == github.event_name && github.head_ref || github.ref_name }}
         run: gh pr update-branch --yes || echo "::notice::No new changes in $REF_NAME."
 
+      # Runs when no PR exists and the auto-translate branch already exists remotely.
       - name: Delete an orphaned branch with no pull request
-        if: steps.check_pr.outputs.found == 'false' && steps.branch-check.outputs.exists == 'true'
+        if: |
+          steps.check_pr.outputs.found == 'false' &&
+          steps.branch_check.outputs.exists == 'true'
         run: git push origin --delete "$PR_BRANCH_NAME"
 
+      # Creates the auto-translate branch from the current ref so later jobs run on it.
       - name: Create a new branch with recent changes from the BASE
+        id: create_branch
         run: git checkout -B "$PR_BRANCH_NAME"
 
+      # Runs when no open translations PR exists (new branch was just created).
       - name: Publish the branch
         if: steps.check_pr.outputs.found == 'false'
         run: git push origin "$PR_BRANCH_NAME"
@@ -117,6 +160,7 @@ jobs:
   # - Sets up Node.js (if necessary).
   # - Installs npm dependencies (if necessary).
   # - Runs the `i18n-ci-pre` script to ensure that all strings are accounted for.
+  # - Normalizes PO/POT with msgcat and logs `msgfmt --statistics` per file; sets job output `has_untranslated`.
   # - Creates a diff file of the changes.
   # - Saves the diff file as an artifact for use in future steps.
   prepare-for-translation:
@@ -125,46 +169,104 @@ jobs:
     needs: [ 'prepare-pr-branch' ]
     permissions:
       contents: read
+    outputs:
+      has_untranslated: ${{ steps.check_untranslated.outputs.has_untranslated }}
 
     steps:
       - name: Checkout repository
+        id: checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
         with:
           ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: false
 
-      - name: Set Up PHP
+      # Provides PHP so Composer and i18n-ci-pre can run.
+      - name: Set up PHP
+        id: setup_php
         uses: shivammathur/setup-php@44454db4f0199b8b9685a5d763dc37cbf79108e1 # v2.36.0
         with:
           php-version: "8.0"
 
+      # Installs Composer deps so i18n-ci-pre (and i18n-ci-post in a later job) can run.
       - name: Install Composer dependencies
+        id: install_composer_deps
         uses: ramsey/composer-install@a35c6ebd3d08125aaf8852dff361e686a1a67947 # v3.2.0
         with:
           composer-options: "--no-interaction --no-progress --prefer-dist"
 
+      # Runs when i18n-script-location is npm.
       - name: Set up Node.js
-        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f  # v6.1.0
+        id: setup_node
         if: inputs.i18n-script-location == 'npm'
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f  # v6.1.0
         with:
           node-version-file: '.nvmrc'
 
+      # Runs when i18n-script-location is npm.
       - name: Install Node.js dependencies
+        id: install_node_deps
         if: inputs.i18n-script-location == 'npm'
         run: npm ci
 
+      # Required. Updates POT/PO so all strings are present before translation.
       - name: Run i18n-ci-pre scripts
+        id: run_i18n_pre
         env:
           SCRIPT_LOCATION: ${{ inputs.i18n-script-location == 'npm' && 'npm' || 'composer' }}
         run: $SCRIPT_LOCATION run i18n-ci-pre
 
+      # Stabilize gettext layout; count untranslated via msgfmt (gates downstream jobs).
+      - name: Normalize PO/POT files and check for untranslated strings
+        id: check_untranslated
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y gettext
+          if [ -d languages ]; then
+            find languages \( -name '*.po' -o -name '*.pot' \) -type f -print0 | while IFS= read -r -d '' f; do
+              msgcat --sort-output --no-wrap -o "$f.msgcat.tmp" "$f"
+              mv "$f.msgcat.tmp" "$f"
+            done
+          else
+            echo "::notice::No languages/ directory; skipping PO/POT normalization."
+          fi
+          total_untranslated=0
+          if [ -d languages ]; then
+            echo ""
+            echo "msgfmt --statistics (full output per .po file):"
+            echo "----------------------------------------"
+            while IFS= read -r -d '' f; do
+              stats=$(msgfmt --statistics -o /dev/null "$f" 2>&1 || true)
+              echo "$f"
+              echo "$stats"
+              echo ""
+              while read -r line; do
+                n=$(echo "$line" | grep -oE '^[0-9]+' || true)
+                if [ -n "$n" ]; then
+                  total_untranslated=$((total_untranslated + n))
+                fi
+              done < <(echo "$stats" | grep -oE '[0-9]+ untranslated message' || true)
+            done < <(find languages -name '*.po' -type f -print0 2>/dev/null)
+            echo "----------------------------------------"
+          fi
+          echo "Total untranslated messages (sum across .po files): $total_untranslated"
+          if [ "$total_untranslated" -gt 0 ]; then
+            echo "has_untranslated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_untranslated=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No untranslated strings in PO files; skipping Azure translation, post-processing, and PR."
+          fi
+
+      # Required. Writes diff only when i18n-ci-pre or normalization produced changes.
       - name: Create a diff file
+        id: create_diff
         run: |
           if ! git diff --quiet; then
             git diff > "$RUNNER_TEMP/updated-translations.diff"
           fi
 
+      # Required. Uploads prepare diff for auto-translate / process-translations.
       - name: Save patch as an artifact
+        id: upload_patch
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: translations-${{ github.run_id }}
@@ -174,22 +276,15 @@ jobs:
 
   # Automatically translates untranslated strings using the Azure AI translation service.
   #
-  # This job will:
-  # - Check out the repository.
-  # - Downloads the patch file from the previous step.
-  # - Applies the patch file.
-  # - Sets up Python.
-  # - Installs Python dependencies.
-  # - Downloads the Python translation script from the workflow repository.
-  # - Translates PO and JSON files using the Azure AI translation service.
-  # - Removes the downloaded translation script.
-  # - Creates a diff file of the changes.
-  # - Saves the diff file as an artifact for use in future steps.
+  # Runs only when prepare-for-translation reported untranslated messages (msgfmt) and run-azure-ai-translate is true.
+  # Applies the prepare job patch, runs translate.py (PO wrap via po-wrapwidth / po-nowrap), writes a new diff, uploads artifact.
   auto-translate-with-azure:
     name: Auto-Translate with Azure AI
     runs-on: ubuntu-latest
     needs: [ 'prepare-pr-branch', 'prepare-for-translation' ]
-    if: inputs.run-azure-ai-translate
+    if: |
+      inputs.run-azure-ai-translate &&
+      needs.prepare-for-translation.outputs.has_untranslated == 'true'
     permissions:
       contents: read
 
@@ -200,45 +295,60 @@ jobs:
           ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: false
 
-      - name: Check for a patch file
+      # Required. May be empty if prepare-for-translation had no diff.
+      - name: Download patch from prepare-for-translation
+        id: download_patch
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # 7.0.0
-        id: download-artifact
         continue-on-error: true
         with:
           name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}
 
+      # Runs when download succeeded (artifact existed).
       - name: Apply the patch file
-        if: steps.download-artifact.outcome == 'success'
+        id: apply_patch
+        if: steps.download_patch.outcome == 'success'
         run: git apply "$RUNNER_TEMP/updated-translations.diff"
 
+      # Provides Python so translate.py can run (polib, requests).
       - name: Set up Python
+        id: setup_python
         uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548  # v6.1.0
         with:
           python-version: '3.x'
 
+      # Installs requests and polib for the Azure translate script.
       - name: Install Python dependencies
+        id: install_python_deps
         run: pip install requests polib
 
-      - name: Download translation scripts from workflow repository
+      - name: Download translation script
+        id: download_script
         run: curl -o "$RUNNER_TEMP/translate.py" https://raw.githubusercontent.com/newfold-labs/workflows/refs/heads/main/translations/translate.py
 
-      - name: Translate PO and JSON files
+      - name: Translate PO files
+        id: translate
         env:
           TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
           TEXT_DOMAIN: ${{ inputs.text_domain }}
+          TRANSLATE_PO_WRAPWIDTH: ${{ inputs.po-wrapwidth }}
+          TRANSLATE_PO_NOWRAP: ${{ inputs.po-nowrap }}
         run: python "$RUNNER_TEMP/translate.py"
 
       - name: Remove downloaded translate script
-        run: rm "$RUNNER_TEMP/translate.py"
+        id: remove_script
+        if: always()
+        run: rm -f "$RUNNER_TEMP/translate.py"
 
       - name: Create a diff file
+        id: create_diff
         run: |
           if ! git diff --quiet; then
             git diff > "$RUNNER_TEMP/updated-translations.diff"
           fi
 
       - name: Save patch as an artifact
+        id: upload_patch
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: translations-${{ github.run_id }}
@@ -246,77 +356,103 @@ jobs:
           retention-days: 7
           overwrite: true
 
-    # Runs post-translation scripts to finalize the translation updates.
-    #
-    # After translating strings, the PHP and JSON files need to be generated to ensure WordPress can properly display
-    # any newly translated strings.
-    #
-    # This job will:
-    # - Check out the repository.
-    # - Downloads the patch file from the previous step.
-    # - Applies the patch file.
-    # - Sets up PHP.
-    # - Installs Composer dependencies.
-    # - Sets up Node.js (if necessary).
-    # - Installs npm dependencies (if necessary).
-    # - Runs the `i18n-ci-post` script to ensure all translated strings are available.
-    # - Creates a diff file of the changes.
-    # - Saves the diff file as an artifact for use in future steps.
+  # Runs post-translation scripts to finalize the translation updates.
+  #
+  # After translating strings, the PHP and JSON files need to be generated to ensure WordPress can properly display
+  # any newly translated strings.
+  #
+  # This job will:
+  # - Check out the repository.
+  # - Downloads the patch file from the previous step.
+  # - Applies the patch file.
+  # - Sets up PHP.
+  # - Installs Composer dependencies.
+  # - Sets up Node.js (if necessary).
+  # - Installs npm dependencies (if necessary).
+  # - Runs the `i18n-ci-post` script to ensure all translated strings are available.
+  # - Creates a diff file of the changes.
+  # - Saves the diff file as an artifact for use in future steps.
   process-translations:
     name: Runs scripts post-translation
     runs-on: ubuntu-latest
     needs: [ 'prepare-pr-branch', 'prepare-for-translation', 'auto-translate-with-azure' ]
+    # Run when there is translation work and Azure either succeeded or was skipped (e.g. run-azure-ai-translate false).
+    if: |
+      always() &&
+      needs.prepare-for-translation.outputs.has_untranslated == 'true' &&
+      (
+        needs.auto-translate-with-azure.result == 'success' ||
+        needs.auto-translate-with-azure.result == 'skipped'
+      )
     permissions:
       contents: read
 
     steps:
       - name: Checkout repository
+        id: checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
         with:
           ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: false
 
-      - name: Check for a patch file
+      # Required. Artifact from auto-translate-with-azure (or prepare if that job only re-uploaded).
+      - name: Download patch artifact
+        id: download_patch
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # 7.0.0
-        id: download-artifact
         continue-on-error: true
         with:
           name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}
 
+      # Runs when download succeeded.
       - name: Apply the patch file
-        if: steps.download-artifact.outcome == 'success'
+        id: apply_patch
+        if: steps.download_patch.outcome == 'success'
         run: git apply "$RUNNER_TEMP/updated-translations.diff"
 
+      # Provides PHP so Composer and i18n-ci-post can run.
       - name: Set Up PHP
+        id: setup_php
         uses: shivammathur/setup-php@44454db4f0199b8b9685a5d763dc37cbf79108e1 # v2.36.0
         with:
           php-version: "8.0"
 
+      # Installs Composer deps so i18n-ci-post can run.
       - name: Install Composer dependencies
+        id: install_composer_deps
         uses: ramsey/composer-install@a35c6ebd3d08125aaf8852dff361e686a1a67947 # v3.2.0
         with:
           composer-options: "--no-interaction --no-progress --prefer-dist"
 
+      # Runs when i18n-script-location is npm.
       - name: Set up Node.js
-        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f  # v6.1.0
+        id: setup_node
         if: inputs.i18n-script-location == 'npm'
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f  # v6.1.0
         with:
           node-version-file: '.nvmrc'
 
+      # Runs when i18n-script-location is npm.
       - name: Install Node.js dependencies
+        id: install_node_deps
         if: inputs.i18n-script-location == 'npm'
         run: npm ci
 
-      - name: Run Post-CI i18n scripts
+      # Runs i18n-ci-post to build MO/JSON so WordPress can use the translated strings.
+      - name: Run i18n-ci-post scripts
+        id: run_i18n_post
         env:
           SCRIPT_LOCATION: ${{ inputs.i18n-script-location == 'npm' && 'npm' || 'composer' }}
         run: $SCRIPT_LOCATION run i18n-ci-post
 
+      # Stages new language files so they are included in the diff and PR.
       - name: Add any new language files
+        id: add_language_files
         run: git add -A languages/
 
+      # Captures i18n-ci-post changes (e.g. generated MO/JSON) for the artifact.
       - name: Create a diff file
+        id: create_diff
         run: |
           if ! git diff --quiet; then
             git diff > "$RUNNER_TEMP/updated-translations.diff"
@@ -324,7 +460,9 @@ jobs:
             echo "::notice::No strings were missing from the POT or PO files."
           fi
 
-      - name: Save new patch as an artifact
+      # Uploads the final diff so create-translation-pr can apply and commit it.
+      - name: Save patch as an artifact
+        id: upload_patch
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: translations-${{ github.run_id }}
@@ -351,63 +489,99 @@ jobs:
     name: Create a Pull Request for Translation Updates
     runs-on: ubuntu-latest
     needs: [ 'prepare-pr-branch', 'prepare-for-translation', 'auto-translate-with-azure', 'process-translations' ]
+    if: |
+      needs.prepare-for-translation.outputs.has_untranslated == 'true' &&
+      (
+        needs.auto-translate-with-azure.result == 'success' ||
+        needs.auto-translate-with-azure.result == 'skipped'
+      ) &&
+      needs.process-translations.result == 'success'
     permissions:
       contents: write
       pull-requests: write
 
     steps:
       - name: Checkout repository
+        id: checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
         with:
           ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: true
 
-      - name: Check for a patch file
+      # Required. Artifact from process-translations (final diff).
+      - name: Download patch artifact
+        id: download_patch
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # 7.0.0
-        id: download-artifact
         continue-on-error: true
         with:
           name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}
 
-      - name: Stop the workflow run when no patch is found
+      # Required. Outputs has_patch=true/false; later steps run only when true.
+      - name: Check for patch to commit
+        id: check_patch
         run: |
-          if [ ! -s "$RUNNER_TEMP/updated-translations.diff" ]; then
+          if [ -s "$RUNNER_TEMP/updated-translations.diff" ]; then
+            echo "has_patch=true" >> "$GITHUB_OUTPUT"
+          else
             echo "::notice::There are no translation updates to commit."
-            exit 0
+            echo "has_patch=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Runs when artifact contained a non-empty diff.
       - name: Apply the patch file
+        id: apply_patch
+        if: steps.check_patch.outputs.has_patch == 'true'
         run: git apply "$RUNNER_TEMP/updated-translations.diff"
 
+      # Sets Git user for the commit; needed so push succeeds.
       - name: Configure Git identity
+        id: git_config
+        if: steps.check_patch.outputs.has_patch == 'true'
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
 
+      # Stages all changes (patched files and new language files) for commit.
       - name: Stage changes
+        id: stage
+        if: steps.check_patch.outputs.has_patch == 'true'
         run: git add -A
 
+      # Commits staged translation updates with a fixed message.
       - name: Commit changes
+        id: commit
+        if: steps.check_patch.outputs.has_patch == 'true'
         run: git commit -m "Apply all automated translation updates."
 
+      # Pushes the commit to the auto-translate branch so the PR is updated or can be created.
       - name: Push changes
+        id: push
+        if: steps.check_patch.outputs.has_patch == 'true'
         run: git push origin "$PR_BRANCH_NAME"
 
+      # Runs when we pushed and an open translations PR already existed.
       - name: Display updated pull request information
-        if: needs.prepare-pr-branch.outputs.pr_found != 'false'
+        id: display_pr_updated
+        if: |
+          steps.check_patch.outputs.has_patch == 'true' &&
+          needs.prepare-pr-branch.outputs.pr_found != 'false'
         env:
           PR_NUMBER: ${{ needs.prepare-pr-branch.outputs.pr_found }}
         run: echo "::notice::Changes pushed to existing pull request https://github.com/${{ github.repository }}/pull/$PR_NUMBER."
 
+      # Runs when we pushed and no open translations PR existed (create new PR).
       - name: Create Pull Request
-        if: needs.prepare-pr-branch.outputs.pr_found == 'false'
+        id: create_pr
+        if: |
+          steps.check_patch.outputs.has_patch == 'true' &&
+          needs.prepare-pr-branch.outputs.pr_found == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF_NAME: ${{ 'pull_request' == github.event_name && github.head_ref || github.ref_name }}
         run: |
           PR_BODY="$({
-            echo "This pull request contains automatic translations of PO and JSON files."
+            echo "This pull request contains automatic PO translations; locale JSON and .l10n.php files are regenerated from the PO catalogs by i18n-ci-post."
             echo ""
             echo "The workflow run responsible for creating this pull request can be found [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})."
           })"
