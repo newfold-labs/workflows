@@ -1,5 +1,10 @@
+"""
+Translate empty msgstr entries in PO files under languages/ via Azure Translator.
+
+Locale JSON (and other derived assets) are not handled here; they are regenerated
+from the PO catalogs by the repo's i18n-ci-post / WP-CLI flow.
+"""
 import os
-import json
 import re
 import requests
 import polib
@@ -9,7 +14,7 @@ TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
 # When saving PO files, polib only supports one formatting option: wrapwidth.
 # - TRANSLATE_PO_WRAPWIDTH: max line length (default 77). Used only when TRANSLATE_PO_NOWRAP is not set.
 # - TRANSLATE_PO_NOWRAP: if set (e.g. "1" or "true"), use wrapwidth=0 so long msgid/msgstr are not
-#   broken across lines. 
+#   broken across lines.
 #   Note: polib always joins reference comments (#: file:line) with spaces;
 #   with nowrap they become one long line; with wrapping it puts multiple refs per line up to wrapwidth.
 #   Polib does not support "one #: per line".
@@ -65,7 +70,7 @@ def translate_entries(entries, get_id_context, apply_translation, lang):
         translated = strip_context_from_translation(translated) if had_context else translated.strip()
         apply_translation(entry, translated)
 
-# Translate .po files (only save when we actually translate something to avoid formatting-only diffs)
+# Translate .po files only (only save when we actually translate something to avoid formatting-only diffs).
 for path in Path('languages').rglob('*.po'):
     lang = extract_lang_from_filename(path.name)
     print(f"Language detected: {lang}")
@@ -87,57 +92,3 @@ for path in Path('languages').rglob('*.po'):
 
     translate_entries(entries_to_translate, get_po_id_context, apply_po_translation, lang)
     po.save()
-
-# Translate .json files
-CONTEXT_SEPARATORS = ["|", "\u0004"]
-
-def split_context_key(key):
-    for sep in CONTEXT_SEPARATORS:
-        if sep in key:
-            context, msgid = key.split(sep, 1)
-            return context, msgid, sep
-    return None, key, None
-
-for path in Path('languages').rglob('*.json'):
-    lang = extract_lang_from_filename(path.name)
-    print(f"Language detected: {lang}")
-    if not lang:
-        continue
-
-    print(f"Processing file: {path}")
-    with open(path, 'r', encoding='utf-8') as f:
-        try:
-            content = json.load(f)
-        except json.JSONDecodeError:
-            continue
-
-    if "locale_data" not in content or "messages" not in content["locale_data"]:
-        continue
-
-    messages = content["locale_data"]["messages"]
-    keys_to_translate = []
-    key_info_map = {}
-
-    for key, val in messages.items():
-        if key == "" or not isinstance(val, list) or val[0].strip():
-            continue
-        context, msgid, sep = split_context_key(key)
-        composed = compose_msg_with_context(msgid, context)
-        keys_to_translate.append(composed)
-        key_info_map[key] = (msgid, context, sep)
-
-    if not keys_to_translate:
-        continue
-
-    translated_texts = batch_translate(keys_to_translate, lang)
-    if not translated_texts:
-        continue
-
-    for key, translated in zip(key_info_map.keys(), translated_texts):
-        _, context, _ = key_info_map[key]
-        if context:
-            translated = strip_context_from_translation(translated)
-        messages[key] = [translated.strip()]
-
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(content, f, ensure_ascii=False, indent=2)
