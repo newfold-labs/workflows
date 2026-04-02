@@ -462,6 +462,7 @@ jobs:
 
       # Avoid PRs that only bump PO header metadata (e.g. PO-Revision-Date) when no strings changed.
       - name: Drop patch if diff is only PO header metadata
+        id: drop_patch_if_only_po_header_metadata
         run: |
           DIFF="$RUNNER_TEMP/updated-translations.diff"
           if [ ! -s "$DIFF" ]; then
@@ -493,6 +494,7 @@ jobs:
           fi
 
       - name: Save new patch as an artifact
+        id: upload_patch
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: translations-${{ github.run_id }}
