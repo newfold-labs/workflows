@@ -493,6 +493,7 @@ jobs:
             echo "::notice::Discarded translation patch: only PO/header metadata changed (PO-Revision-Date)."
           fi
 
+      # Uploads the final diff so create-translation-pr can apply and commit it.
       - name: Save new patch as an artifact
         id: upload_patch
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
