@@ -438,7 +438,7 @@ jobs:
         if: inputs.i18n-script-location == 'npm'
         run: npm ci
 
-      # Runs i18n-ci-post to build MO/JSON so WordPress can use the translated strings.
+      # Runs i18n-ci-post to regenerate JED JSON and PHP (.l10n.php) translation files from PO catalogs.
       - name: Run i18n-ci-post scripts
         id: run_i18n_post
         env:
@@ -450,7 +450,7 @@ jobs:
         id: add_language_files
         run: git add -A languages/
 
-      # Captures i18n-ci-post changes (e.g. generated MO/JSON) for the artifact.
+      # Captures i18n-ci-post changes (e.g. generated JSON and .l10n.php) for the artifact.
       - name: Create a diff file
         id: create_diff
         run: |
