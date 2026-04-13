@@ -375,7 +375,7 @@ jobs:
           echo "$OUTPUT" >> coverage-comment.md
 
       - name: Add coverage PR comment
-        uses: mshick/add-pr-comment@f102bb3ebc97eedd4e2a98a9e71e462cc257fe80 # v3.9.1
+        uses: mshick/add-pr-comment@64b8e914979889d746c99dea15a76e77ef64580a # v3.10.0
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         continue-on-error: true # When a PR is opened by a non-member, there are no write permissions (and no access to secrets), so this step will always fail.
         with:
