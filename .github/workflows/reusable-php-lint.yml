@@ -1,0 +1,178 @@
+name: Reusable PHP Lint
+
+# Runs `php -l` (PHP linter) against PHP files in the repository to catch
+# syntax errors before they get merged. Designed to be called from the
+# Bluehost plugin, HostGator plugin, and any Newfold module repository.
+#
+# By default, on pull_request events only the PHP files changed in the PR
+# are linted. For all other events (push, schedule, etc.) every PHP file in
+# the repository is linted. Callers may override this behaviour via the
+# `scope` input.
+#
+
+on:
+  workflow_call:
+    inputs:
+      php-version:
+        description: The version of PHP to be used for linting.
+        type: string
+        default: '8.1'
+      scope:
+        description: >
+          Which PHP files to lint. One of 'auto' (default: 'changed' for
+          pull_request events, 'all' otherwise), 'changed' (only files
+          changed relative to the PR base ref), or 'all' (every PHP file
+          in the repository, after applying `paths-ignore`).
+        type: string
+        default: 'auto'
+      paths-ignore:
+        description: >
+          Space-separated list of path prefixes to exclude when linting.
+          Applied to both 'changed' and 'all' scopes.
+        type: string
+        default: 'vendor node_modules'
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured individually for each job.
+permissions: {}
+
+jobs:
+  php-lint:
+    name: PHP Syntax Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          # For pull_request events we need the full history so that we can
+          # diff against the base ref to find changed PHP files.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
+          show-progress: ${{ runner.debug == '1' && 'true' || 'false' }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+          tools: none
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show PHP version
+        run: php --version
+
+      - name: Determine PHP files to lint
+        id: files
+        env:
+          SCOPE_INPUT: ${{ inputs.scope }}
+          PATHS_IGNORE: ${{ inputs.paths-ignore }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Resolve 'auto' to 'changed' for pull_request events, otherwise 'all'.
+          scope="$SCOPE_INPUT"
+          if [[ "$scope" == "auto" ]]; then
+            if [[ "$EVENT_NAME" == "pull_request" ]]; then
+              scope="changed"
+            else
+              scope="all"
+            fi
+          fi
+
+          # Fall back to 'all' if we were asked for 'changed' but don't have
+          # the SHAs needed to compute a diff (e.g. push event).
+          if [[ "$scope" == "changed" && ( -z "${BASE_SHA:-}" || -z "${HEAD_SHA:-}" ) ]]; then
+            echo "::notice::Scope 'changed' requested but base/head SHAs are unavailable; falling back to 'all'."
+            scope="all"
+          fi
+
+          echo "Resolved scope: $scope"
+
+          declare -a CANDIDATES=()
+
+          if [[ "$scope" == "changed" ]]; then
+            echo "Determining changed PHP files between $BASE_SHA and $HEAD_SHA..."
+            mapfile -t CANDIDATES < <(git diff --name-only --diff-filter=ACMRT "$BASE_SHA" "$HEAD_SHA" -- '*.php' ':(glob)**/*.php' || true)
+          else
+            echo "Listing all PHP files in the repository..."
+            prune_args=()
+            for dir in $PATHS_IGNORE; do
+              prune_args+=( -path "./$dir" -prune -o )
+            done
+            mapfile -t CANDIDATES < <(find . "${prune_args[@]}" -type f -name '*.php' -print | sed 's|^\./||')
+          fi
+
+          files_file="$RUNNER_TEMP/php-files.txt"
+          : > "$files_file"
+
+          for file in "${CANDIDATES[@]:-}"; do
+            [[ -z "$file" ]] && continue
+            skip=0
+            for dir in $PATHS_IGNORE; do
+              case "$file" in
+                "$dir"/*) skip=1; break ;;
+              esac
+            done
+            [[ $skip -eq 1 ]] && continue
+            [[ ! -f "$file" ]] && continue
+            printf '%s\n' "$file" >> "$files_file"
+          done
+
+          count=$(wc -l < "$files_file" | tr -d ' ')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "files=$files_file" >> "$GITHUB_OUTPUT"
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+
+          echo "Found $count PHP file(s) to lint (scope: $scope)."
+          if [[ $count -gt 0 ]]; then
+            echo "---"
+            cat "$files_file"
+            echo "---"
+          fi
+
+      - name: Run php -l on selected files
+        if: ${{ steps.files.outputs.count != '0' }}
+        env:
+          FILES_LIST: ${{ steps.files.outputs.files }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          failed=0
+          fail_log="$RUNNER_TEMP/php-lint-failures.log"
+          : > "$fail_log"
+
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            if ! output=$(php -l "$file" 2>&1); then
+              failed=$((failed + 1))
+              echo "::error file=${file}::PHP syntax error detected"
+              echo "----- $file -----" >> "$fail_log"
+              echo "$output" >> "$fail_log"
+              echo "$output"
+            fi
+          done < "$FILES_LIST"
+
+          echo ""
+          if [[ $failed -gt 0 ]]; then
+            echo "::error::PHP lint failed for $failed file(s). See annotations above."
+            echo ""
+            echo "Summary of failures:"
+            cat "$fail_log"
+            exit 1
+          fi
+
+          echo "All PHP files passed 'php -l' syntax check."
+
+      - name: No PHP files to lint
+        if: ${{ steps.files.outputs.count == '0' }}
+        env:
+          RESOLVED_SCOPE: ${{ steps.files.outputs.scope }}
+        run: echo "No PHP files to lint for this run (scope=${RESOLVED_SCOPE})."
