@@ -144,7 +144,7 @@ jobs:
           npm --version
 
       - name: Install PHP Dependencies for Plugin
-        run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
+        run: composer install --no-progress --no-dev --optimize-autoloader --prefer-source
 
       - name: NPM Install for Plugin
         run: npm ci --legacy-peer-deps
