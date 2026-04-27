@@ -1,13 +1,9 @@
 import pytest
-import json
 import os
-import sys
-import tempfile
 import importlib.util
 from pathlib import Path
-from unittest.mock import Mock, patch, mock_open, MagicMock
+from unittest.mock import Mock, patch
 import requests
-import polib
 
 # Set the text domain.
 os.environ["TEXT_DOMAIN"] = "newfold-labs-workflows"
@@ -30,8 +26,6 @@ batch_translate = translate_module.batch_translate
 compose_msg_with_context = translate_module.compose_msg_with_context
 strip_context_from_translation = translate_module.strip_context_from_translation
 translate_entries = translate_module.translate_entries
-split_context_key = translate_module.split_context_key
-CONTEXT_SEPARATORS = translate_module.CONTEXT_SEPARATORS
 
 class TestExtractLangFromFilename:
 
@@ -45,11 +39,9 @@ class TestExtractLangFromFilename:
         (f"{TEXT_DOMAIN}-de.po", "de"),
         (f"{TEXT_DOMAIN}-es.po", "es"),
         (f"{TEXT_DOMAIN}-fr.po", "fr"),
-        # JSON files with two character locale codes.
+        # Same basename pattern as PO (script only processes .po files).
         (f"{TEXT_DOMAIN}-pt.json", "pt"),
         (f"{TEXT_DOMAIN}-de.json", "de"),
-        (f"{TEXT_DOMAIN}-es.json", "es"),
-        (f"{TEXT_DOMAIN}-fr.json", "fr"),
         # Four character locale codes.
         (f"{TEXT_DOMAIN}-fr_FR.po", "fr-FR"),
         (f"{TEXT_DOMAIN}-de_DE.po", "de-DE"),
@@ -112,28 +104,6 @@ class TestStripContextFromTranslation:
     )
     def test_strip_context(self, input_text, expected):
         assert strip_context_from_translation(input_text) == expected
-
-class TestSplitContextKey:
-    """Test context key splitting for JSON files."""
-
-    @pytest.mark.parametrize(
-        "key,expected_context,expected_msgid,expected_sep",
-        [
-            ("greeting|Hello", "greeting", "Hello", "|"),
-            ("greeting\u0004Hello", "greeting", "Hello", "\u0004"),
-            ("Hello", None, "Hello", None),
-            ("greeting|Hello|World", "greeting", "Hello|World", "|"),
-            ("|Hello", "", "Hello", "|"),
-            ("greeting|", "greeting", "", "|"),
-            ("greeting|Hello\u0004World", "greeting", "Hello\u0004World", "|"),
-        ]
-    )
-    def test_split_context_key(self, key, expected_context, expected_msgid, expected_sep):
-        context, msgid, sep = split_context_key(key)
-        assert context == expected_context
-        assert msgid == expected_msgid
-        assert sep == expected_sep
-
 
 class TestBatchTranslate:
     """Test batch translation functionality."""
