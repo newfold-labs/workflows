@@ -460,6 +460,39 @@ jobs:
             echo "::notice::No strings were missing from the POT or PO files."
           fi
 
+      # Avoid PRs that only bump PO header metadata (e.g. PO-Revision-Date) when no strings changed.
+      - name: Drop patch if diff is only PO header metadata
+        id: drop_patch_if_only_po_header_metadata
+        run: |
+          DIFF="$RUNNER_TEMP/updated-translations.diff"
+          if [ ! -s "$DIFF" ]; then
+            exit 0
+          fi
+          substantive=0
+          any_change=0
+          while IFS= read -r line || [ -n "$line" ]; do
+            [ "${#line}" -lt 2 ] && continue
+            c=${line:0:1}
+            [ "$c" != "+" ] && [ "$c" != "-" ] && continue
+            case "$line" in
+              ---*|\+\+\+*) continue ;;
+            esac
+            any_change=1
+            body=${line:1}
+            body_trim=${body#"${body%%[![:space:]]*}"}
+            [ -z "$body_trim" ] && continue
+            [[ "$body" == *"No newline at end of file"* ]] && continue
+            case "$body_trim" in
+              '"PO-Revision-Date:'*) continue ;;
+            esac
+            substantive=1
+            break
+          done < "$DIFF"
+          if [ "$substantive" -eq 0 ] && [ "$any_change" -eq 1 ]; then
+            : > "$DIFF"
+            echo "::notice::Discarded translation patch: only PO/header metadata changed (PO-Revision-Date)."
+          fi
+
       # Uploads the final diff so create-translation-pr can apply and commit it.
       - name: Save patch as an artifact
         id: upload_patch
