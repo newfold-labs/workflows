@@ -2,6 +2,14 @@ name: Reusable - Dependabot Auto-Merge
 on:
   workflow_call:
     inputs:
+      pr-number:
+        description: Number of the Dependabot PR to merge.
+        type: string
+        required: true
+      head-sha:
+        description: Head commit SHA of the PR; used to gate on check-run results.
+        type: string
+        required: true
       merge-method:
         description: How to merge the PR. One of merge | squash | rebase.
         type: string
@@ -12,12 +20,13 @@ on:
 permissions: {}
 
 jobs:
-  # Approves the Dependabot PR and enables GitHub's native auto-merge.
-  # Native auto-merge waits for branch-protection's required status checks to pass,
-  # then merges the PR automatically. This job itself exits in seconds — it does not
-  # poll or hold a runner while CI runs.
+  # Approves the Dependabot PR and merges it once every other check run on the head
+  # SHA has finished successfully. Caller is wired to `workflow_run` on the repo's
+  # CI workflows, so this job fires once per CI workflow completion. Earlier firings
+  # see in-progress checks and defer; the last firing sees everything green and
+  # performs the merge. There is no native `--auto` arming here: the gate is this
+  # job's own check-run aggregation, not branch protection.
   auto-merge:
-    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -33,17 +42,79 @@ jobs:
             *) echo "::error::invalid merge-method '$MERGE_METHOD' (expected merge|squash|rebase)"; exit 1 ;;
           esac
 
-      # Re-approves on every synchronize event so that repos configured to
-      # "dismiss stale approvals on new commits" stay approved across Dependabot rebases.
-      - name: Approve PR
+      - name: Verify PR is open and authored by Dependabot
+        id: pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr review --approve "$PR_URL"
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+        run: |
+          read -r state author <<<"$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '"\(.state) \(.user.login)"')"
+          if [[ "$state" != "open" ]]; then
+            echo "::notice::PR #${PR_NUMBER} is ${state}; nothing to do"
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$author" != "dependabot[bot]" ]]; then
+            echo "::notice::PR #${PR_NUMBER} authored by '${author}', not dependabot[bot]"
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Enable native auto-merge
+      # Walk every check run on the head SHA, excluding the ones produced by THIS
+      # workflow run (matched via the run-id embedded in their details_url). If any
+      # other check run is still queued/in_progress, defer — a later workflow_run
+      # firing will retry. If any has a non-pass conclusion, exit cleanly without
+      # merging. Treats success / skipped / neutral as pass.
+      - name: Gate on all check runs for HEAD SHA
+        id: gate
+        if: steps.pr.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ inputs.head-sha }}
+          SELF_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -u
+          self_marker="/actions/runs/${SELF_RUN_ID}/"
+          merge_ok=true
+          while IFS=$'\t' read -r status conclusion details_url name; do
+            [[ "$details_url" == *"$self_marker"* ]] && continue
+            if [[ "$status" != "completed" ]]; then
+              echo "::notice::check run '${name}' is ${status}; deferring merge"
+              merge_ok=false
+              break
+            fi
+            case "$conclusion" in
+              success|skipped|neutral) ;;
+              *)
+                echo "::notice::check run '${name}' conclusion=${conclusion}; not merging"
+                merge_ok=false
+                break
+                ;;
+            esac
+          done < <(
+            gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs" --paginate \
+              --jq '.check_runs[] | [.status, (.conclusion // ""), .details_url, .name] | @tsv'
+          )
+          echo "merge_ok=${merge_ok}" >> "$GITHUB_OUTPUT"
+
+      # Re-approves on every firing so repos with "dismiss stale approvals on new
+      # commits" stay approved across Dependabot rebases.
+      - name: Approve PR
+        if: steps.gate.outputs.merge_ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+        run: gh pr review --approve --repo "$REPO" "$PR_NUMBER"
+
+      - name: Merge PR
+        if: steps.gate.outputs.merge_ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr-number }}
           MERGE_METHOD: ${{ inputs.merge-method }}
-        run: gh pr merge --auto "--$MERGE_METHOD" "$PR_URL"
+        run: gh pr merge --repo "$REPO" "--$MERGE_METHOD" "$PR_NUMBER"
