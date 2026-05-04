@@ -26,7 +26,12 @@ jobs:
   # see in-progress checks and defer; the last firing sees everything green and
   # performs the merge. There is no native `--auto` arming here: the gate is this
   # job's own check-run aggregation, not branch protection.
-  auto-merge:
+  #
+  # Job ID is intentionally specific so the gate step can identify and exclude
+  # check runs produced by ANY invocation of this reusable workflow on the same SHA
+  # (not just the currently-executing run). Otherwise a previously-failed auto-merge
+  # check run would block all future firings.
+  dependabot-auto-merge:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -62,11 +67,16 @@ jobs:
           fi
           echo "proceed=true" >> "$GITHUB_OUTPUT"
 
-      # Walk every check run on the head SHA, excluding the ones produced by THIS
-      # workflow run (matched via the run-id embedded in their details_url). If any
-      # other check run is still queued/in_progress, defer — a later workflow_run
-      # firing will retry. If any has a non-pass conclusion, exit cleanly without
-      # merging. Treats success / skipped / neutral as pass.
+      # Walk every check run on the head SHA, excluding ones from any auto-merge
+      # invocation. Two layers of exclusion:
+      #   (a) details_url contains the current run-id — catches every check run from
+      #       this run, including any future sibling jobs in the caller.
+      #   (b) name contains "dependabot-auto-merge" — catches check runs from
+      #       earlier (possibly failed) invocations of this reusable workflow on the
+      #       same SHA, so a stale failed run doesn't permanently block the merge.
+      # If any remaining check run is still queued/in_progress, defer — a later
+      # workflow_run firing will retry. If any has a non-pass conclusion, exit
+      # cleanly without merging. Treats success / skipped / neutral as pass.
       - name: Gate on all check runs for HEAD SHA
         id: gate
         if: steps.pr.outputs.proceed == 'true'
@@ -81,6 +91,7 @@ jobs:
           merge_ok=true
           while IFS=$'\t' read -r status conclusion details_url name; do
             [[ "$details_url" == *"$self_marker"* ]] && continue
+            [[ "$name" == *"dependabot-auto-merge"* ]] && continue
             if [[ "$status" != "completed" ]]; then
               echo "::notice::check run '${name}' is ${status}; deferring merge"
               merge_ok=false
