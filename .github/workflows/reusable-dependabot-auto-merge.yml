@@ -89,9 +89,11 @@ jobs:
           set -u
           self_marker="/actions/runs/${SELF_RUN_ID}/"
           merge_ok=true
+          processed=0
           while IFS=$'\t' read -r status conclusion details_url name; do
             [[ "$details_url" == *"$self_marker"* ]] && continue
             [[ "$name" == *"dependabot-auto-merge"* ]] && continue
+            processed=$((processed + 1))
             if [[ "$status" != "completed" ]]; then
               echo "::notice::check run '${name}' is ${status}; deferring merge"
               merge_ok=false
@@ -109,6 +111,13 @@ jobs:
             gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs" --paginate \
               --jq '.check_runs[] | [.status, (.conclusion // ""), .details_url, .name] | @tsv'
           )
+          # Refuse to merge on an empty check-run set — workflow_run fired, so a
+          # CI check run must exist on the SHA. An empty result indicates a
+          # transient API gap; better to defer than merge unvalidated.
+          if [[ "$processed" -eq 0 ]]; then
+            echo "::notice::no non-self check runs found on HEAD SHA; deferring"
+            merge_ok=false
+          fi
           echo "merge_ok=${merge_ok}" >> "$GITHUB_OUTPUT"
 
       # Re-approves on every firing so repos with "dismiss stale approvals on new
