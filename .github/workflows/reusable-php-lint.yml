@@ -99,9 +99,24 @@ jobs:
           declare -a CANDIDATES=()
 
           if [[ "$scope" == "changed" ]]; then
-            echo "Determining changed PHP files between $BASE_SHA and $HEAD_SHA..."
-            mapfile -t CANDIDATES < <(git diff --name-only --diff-filter=ACMRT "$BASE_SHA" "$HEAD_SHA" -- '*.php' ':(glob)**/*.php' || true)
-          else
+            # Diff against the merge-base (not the current base tip) so we only
+            # consider commits introduced by this PR, matching what GitHub shows
+            # in the "Files changed" tab even when the base branch has advanced.
+            merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || true)"
+            if [[ -z "$merge_base" ]]; then
+              echo "::notice::Unable to determine merge-base for $BASE_SHA and $HEAD_SHA; falling back to scope=all."
+              scope="all"
+            else
+              echo "Determining changed PHP files between merge-base $merge_base and $HEAD_SHA..."
+              if ! mapfile -t CANDIDATES < <(git diff --name-only --diff-filter=ACMRT "$merge_base...$HEAD_SHA" -- '*.php' ':(glob)**/*.php'); then
+                echo "::notice::Unable to determine changed PHP files from git diff; falling back to scope=all."
+                scope="all"
+                CANDIDATES=()
+              fi
+            fi
+          fi
+
+          if [[ "$scope" == "all" ]]; then
             echo "Listing all PHP files in the repository..."
             prune_args=()
             for dir in $PATHS_IGNORE; do
@@ -144,7 +159,7 @@ jobs:
           FILES_LIST: ${{ steps.files.outputs.files }}
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           failed=0
           fail_log="$RUNNER_TEMP/php-lint-failures.log"
           : > "$fail_log"
