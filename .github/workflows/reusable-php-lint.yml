@@ -142,9 +142,11 @@ jobs:
           done
 
           count=$(wc -l < "$files_file" | tr -d ' ')
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "files=$files_file" >> "$GITHUB_OUTPUT"
-          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          {
+            echo "count=$count"
+            echo "files=$files_file"
+            echo "scope=$scope"
+          } >> "$GITHUB_OUTPUT"
 
           echo "Found $count PHP file(s) to lint (scope: $scope)."
           if [[ $count -gt 0 ]]; then
