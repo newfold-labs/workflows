@@ -1,6 +1,10 @@
 ##
 # Reusable workflow to clean up stale code coverage directories on gh-pages and optionally squash branch history.
 #
+# Callers that may trigger this multiple times in parallel (e.g. closed PRs, branch delete, schedule) should use a
+# workflow concurrency group (same repo, cancel-in-progress: false) so gh-pages pushes do not race; non-squash pushes
+# also rebase/retry below.
+#
 # Removes gh-pages/<sha>/ directories (one per commit that had coverage runs). Never touches gh-pages/phpunit/.
 #
 # Example usage (from a consumer repo that uses reusable-codecoverage):
@@ -88,15 +92,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.repo_token || secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git add -A
           if git diff --staged --quiet; then
             echo "No changes to commit"
             exit 0
           fi
           git commit -m "chore: remove stale code coverage directories"
-          git push origin gh-pages
+          for attempt in 1 2 3; do
+            git fetch origin gh-pages
+            if ! git rebase origin/gh-pages; then
+              echo "::error::Rebase onto origin/gh-pages failed (conflict). Another job may have touched the same paths; resolve manually or re-run."
+              exit 1
+            fi
+            if git push origin gh-pages; then
+              echo "Push to gh-pages succeeded (attempt ${attempt})."
+              exit 0
+            fi
+            echo "Push rejected (attempt ${attempt}); retrying after rebase..."
+          done
+          echo "::error::Could not push gh-pages cleanup after multiple attempts."
+          exit 1
 
       - name: Squash gh-pages to single commit and force-push
         if: inputs.squash_history
@@ -104,8 +123,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.repo_token || secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           # Orphan commit keeps current tree (including any dir removals done above)
           git checkout --orphan temp
           git add -A

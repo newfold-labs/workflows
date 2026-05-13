@@ -313,7 +313,7 @@ jobs:
       - name: Write base coverage for PR comparison
         if: ${{ (matrix.php == inputs.coverage-php-version) && (github.ref == 'refs/heads/main') }}
         env:
-          COVERAGE_PCT: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+          COVERAGE_PCT: ${{ steps.coverage_percentage.outputs.coverage-rounded }}
         run: |
           if [[ -n "$COVERAGE_PCT" && "$COVERAGE_PCT" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
             printf '%s' "$COVERAGE_PCT" > gh-pages/phpunit/coverage.txt
@@ -324,22 +324,68 @@ jobs:
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         run: php-coverage-badger clover.xml gh-pages/${{ github.event.pull_request.head.sha }}/phpunit/coverage.svg
 
+      # gh-pages is updated concurrently by other PRs/workflows; git-auto-commit-action only pushes and loses races.
+      # Sync to origin/gh-pages immediately before commit, then retry push with pull --rebase if another job landed first.
       - name: Commit code coverage to gh-pages
         if: ${{ matrix.php == inputs.coverage-php-version }}
-        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9  # v7.1.0
-        with:
-          repository: gh-pages
-          branch: gh-pages
-          commit_message: ${{ format('🤖 Save code coverage report to gh-pages {0}%', steps.coverage_percentage.outputs.coverage-rounded) }}
-          commit_options: ""
+        working-directory: gh-pages
         env:
-          GITHUB_TOKEN: "${{ secrets.repo_token }}"
+          GITHUB_TOKEN: ${{ secrets.repo_token || github.token }}
+          COMMIT_MESSAGE: ${{ format('🤖 Save code coverage report to gh-pages {0}%', steps.coverage_percentage.outputs.coverage-rounded) }}
+        run: |
+          set -euo pipefail
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          git fetch origin gh-pages
+
+          has_changes=false
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            has_changes=true
+          elif [ -n "$(git ls-files --others --exclude-standard)" ]; then
+            has_changes=true
+          fi
+
+          if [ "$has_changes" != true ]; then
+            echo "No coverage changes to publish; skipping commit/push."
+            exit 0
+          fi
+
+          git stash push -u -m "codecoverage-wip-${{ github.run_id }}-${{ github.run_attempt }}"
+          git reset --hard origin/gh-pages
+
+          if ! git stash pop; then
+            echo "::error::Could not restore coverage files after syncing gh-pages (merge conflict with concurrent update?). Re-run the workflow."
+            exit 1
+          fi
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to commit after sync."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "$COMMIT_MESSAGE"
+
+          for attempt in 1 2 3; do
+            if git push origin HEAD:gh-pages; then
+              echo "Push to gh-pages succeeded (attempt ${attempt})."
+              exit 0
+            fi
+            echo "Push rejected or failed (attempt ${attempt}); rebasing onto latest origin/gh-pages and retrying..."
+            git fetch origin gh-pages
+            git pull --rebase origin gh-pages
+          done
+
+          echo "::error::Could not push to gh-pages after multiple attempts."
+          exit 1
 
       - name: Add coverage comparison to PR comment
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         env:
-          BASE_COVERAGE: ${{ steps.base-coverage.outputs.base_coverage }}
-          PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+          BASE_COVERAGE: ${{ steps.base_coverage.outputs.base_coverage }}
+          PR_COVERAGE: ${{ steps.coverage_percentage.outputs.coverage-rounded }}
           DEPENDENCY_ONLY: ${{ steps.dependency-only.outputs.dependency_only }}
         run: |
           {
@@ -425,8 +471,8 @@ jobs:
       - name: Ensure coverage does not decrease
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         env:
-          BASE_COVERAGE: ${{ steps.base-coverage.outputs.base_coverage }}
-          PR_COVERAGE: ${{ steps.coverage-percentage.outputs.coverage-rounded }}
+          BASE_COVERAGE: ${{ steps.base_coverage.outputs.base_coverage }}
+          PR_COVERAGE: ${{ steps.coverage_percentage.outputs.coverage-rounded }}
           DEPENDENCY_ONLY: ${{ steps.dependency-only.outputs.dependency_only }}
         run: |
           if [ "$DEPENDENCY_ONLY" = "true" ]; then

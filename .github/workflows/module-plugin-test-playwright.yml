@@ -265,8 +265,10 @@ jobs:
           PACKAGE: ${{ steps.workflow.outputs.PACKAGE }}
         run: echo "{\"plugins\":[\"$DIST/$PACKAGE\"]}" > .wp-env.override.json
 
+      # Use the plugin's pinned @wordpress/env (via npx wp-env) so start/run share the same
+      # cache and runtime detection as Playwright global setup (matches plugin playwright workflows).
       - name: Install WordPress
-        run: npx @wordpress/env@latest start --debug
+        run: npx wp-env start --debug
 
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
