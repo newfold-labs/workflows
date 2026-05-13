@@ -2,7 +2,7 @@
 # Example workflow for consumer repos: AI PR diff review via Cloudflare AI Gateway.
 #
 # Copy to .github/workflows/ (e.g. ai-code-review.yml), then:
-#   - Pin `uses: ...@<commit-sha>` after choosing a stable workflows release.
+#   - Pin `uses: ...@<full-40-char-commit-sha>` (supply chain / zizmor); bump when workflows changes.
 #   - Add repository (or org) secrets: CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_GATEWAY_TOKEN.
 #
 # Forked pull_request workflows do not receive secrets; the reusable workflow is skipped
@@ -26,8 +26,10 @@ jobs:
   review:
     if: github.repository != 'newfold-labs/workflows' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.fork == false
     name: Review PR diff
-    uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@add/code-review
+    uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@cd7404d3582825f7f5e275f091942bd435c8b7d2
     permissions:
       contents: read
       pull-requests: read
-    secrets: inherit
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ secrets.CLOUDFLARE_AI_GATEWAY_TOKEN }}

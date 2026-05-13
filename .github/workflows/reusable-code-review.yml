@@ -2,10 +2,12 @@
 # Reusable workflow: AI pull request diff review via Cloudflare AI Gateway.
 #
 # Consumer repos:
-#   uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@main
-#   secrets: inherit
+#   uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@<full-commit-sha>
+#   secrets:
+#     CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+#     CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ secrets.CLOUDFLARE_AI_GATEWAY_TOKEN }}
 #
-# Required repository/org secrets (caller passes via secrets: inherit):
+# Required repository/org secrets:
 #   - CLOUDFLARE_ACCOUNT_ID
 #   - CLOUDFLARE_AI_GATEWAY_TOKEN
 #
@@ -40,12 +42,13 @@ jobs:
   review:
     name: Review PR diff
     runs-on: ubuntu-latest
+    environment: cloudflare-ai-code-review
     permissions:
       contents: read
       pull-requests: read
     steps:
       - name: Review changed code with Cloudflare AI Gateway
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_AI_GATEWAY_ID: ${{ inputs.cloudflare_ai_gateway_id }}
@@ -205,4 +208,3 @@ jobs:
 
               console.log(`::${command} file=${path},line=${line},title=${title}::${message}`);
             }
-
