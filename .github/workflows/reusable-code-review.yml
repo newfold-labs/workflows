@@ -27,7 +27,7 @@ on:
         description: Cloudflare AI Gateway id segment (path after account id)
         type: string
         required: false
-        default: github-actions-workflows
+        default: github-action-workflows
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         description: Cloudflare account id for AI Gateway URL
