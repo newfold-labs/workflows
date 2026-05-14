@@ -14,6 +14,9 @@
 # Gateway id (URL segment): set org or repo variable CLOUDFLARE_AI_GATEWAY_ID, or pass
 # workflow input cloudflare_ai_gateway_id from the caller. Variable is preferred so all
 # repos share one gateway name without pinning it in YAML.
+#
+# Caller must grant at least pull-requests: write and checks: write so github-script can
+# post PR review comments and file annotations without 403.
 ##
 name: Reusable AI Code Review
 
@@ -29,7 +32,7 @@ on:
         description: Optional override for gateway id; if empty, uses vars.CLOUDFLARE_AI_GATEWAY_ID
         type: string
         required: false
-        default: github-action-workflows
+        default: ''
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         description: Cloudflare account id for AI Gateway URL
@@ -46,7 +49,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
+      checks: write
     steps:
       - name: Review changed code with Cloudflare AI Gateway
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
