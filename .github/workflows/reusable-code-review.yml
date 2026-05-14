@@ -1,5 +1,5 @@
 ##
-# Reusable workflow: AI pull request diff review via Cloudflare AI Gateway.
+# Reusable workflow: AI pull request review via Cloudflare AI Gateway (PR comment, Claude-style).
 #
 # Consumer repos:
 #   uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@<full-commit-sha>
@@ -12,11 +12,9 @@
 #   - CLOUDFLARE_AI_GATEWAY_TOKEN
 #
 # Gateway id (URL segment): set org or repo variable CLOUDFLARE_AI_GATEWAY_ID, or pass
-# workflow input cloudflare_ai_gateway_id from the caller. Variable is preferred so all
-# repos share one gateway name without pinning it in YAML.
+# workflow input cloudflare_ai_gateway_id from the caller.
 #
-# Caller must grant at least pull-requests: write and checks: write so github-script can
-# post PR review comments and file annotations without 403.
+# Posts one sticky PR comment (updated on each run), similar to anthropics/claude-code-action + use_sticky_comment.
 ##
 name: Reusable AI Code Review
 
@@ -33,6 +31,11 @@ on:
         type: string
         required: false
         default: ''
+      guidance_file:
+        description: Optional repo-relative path to load as review guidance (e.g. CLAUDE.md); skipped if missing
+        type: string
+        required: false
+        default: CLAUDE.md
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         description: Cloudflare account id for AI Gateway URL
@@ -50,21 +53,31 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-      checks: write
     steps:
-      - name: Review changed code with Cloudflare AI Gateway
+      - name: Post AI review as PR comment (Cloudflare AI Gateway)
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_AI_GATEWAY_ID: ${{ inputs.cloudflare_ai_gateway_id || vars.CLOUDFLARE_AI_GATEWAY_ID }}
           CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ secrets.CLOUDFLARE_AI_GATEWAY_TOKEN }}
           AI_REVIEW_MODEL: ${{ inputs.ai_review_model }}
+          GUIDANCE_FILE: ${{ inputs.guidance_file }}
         with:
           script: |
+            const STICKY_MARKER = '<!-- ai-gateway-pr-review:v1 -->';
+            const MAX_COMMENT_CHARS = 62000;
+
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.warning('Not a pull_request event; skipping AI review.');
+              return;
+            }
+
             const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
             const gatewayId = process.env.CLOUDFLARE_AI_GATEWAY_ID;
             const gatewayToken = process.env.CLOUDFLARE_AI_GATEWAY_TOKEN;
             const model = process.env.AI_REVIEW_MODEL || 'openai/gpt-5';
+            const guidancePath = (process.env.GUIDANCE_FILE || 'CLAUDE.md').trim() || 'CLAUDE.md';
 
             if (!accountId) {
               core.setFailed('Missing required secret: CLOUDFLARE_ACCOUNT_ID');
@@ -77,7 +90,23 @@ jobs:
             }
 
             const { owner, repo } = context.repo;
-            const pull_number = context.payload.pull_request.number;
+            const pull_number = pr.number;
+
+            let guidanceText = '';
+            try {
+              const ref = pr.head.sha;
+              const { data } = await github.rest.repos.getContent({
+                owner,
+                repo,
+                path: guidancePath,
+                ref,
+              });
+              if (data && !Array.isArray(data) && data.type === 'file' && data.encoding === 'base64' && data.content) {
+                guidanceText = Buffer.from(data.content, 'base64').toString('utf8').slice(0, 32000);
+              }
+            } catch (e) {
+              core.info('No guidance file at ' + guidancePath + ' for ref ' + pr.head.sha + ' (' + (e.message || e) + '). Continuing without.');
+            }
 
             const diffResponse = await github.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
               owner,
@@ -95,29 +124,44 @@ jobs:
               return;
             }
 
+            const prTitle = pr.title || '';
+            const prBody = (pr.body || '').slice(0, 8000);
+
             const prompt = [
-              'Review this pull request diff.',
-              'Return only valid JSON matching this exact shape:',
-              '{"annotations":[{"path":"relative/file/path","line":123,"severity":"notice|warning|failure","title":"short title","message":"specific review comment"}]}',
-              'Rules:',
-              '- Only annotate changed lines that appear in the diff.',
-              '- Prefer high-signal correctness, security, reliability, and test coverage issues.',
-              '- Do not comment on style unless it can cause confusion or defects.',
-              '- Use at most 20 annotations.',
-              '- If there are no useful findings, return {"annotations":[]}.',
+              'Repository: ' + owner + '/' + repo,
+              'PR title: ' + prTitle,
+              'PR description (truncated):',
+              prBody,
               '',
+              'Review the pull request unified diff below. Produce a thorough, constructive review similar in spirit to an experienced human reviewer leaving one GitHub PR comment.',
+              '',
+              'Cover explicitly:',
+              '- What this PR does well (strengths)',
+              '- Minor suggestions / nits (non-blocking)',
+              '- Potential bugs, reliability, or performance concerns',
+              '- Security implications if any (call out severity)',
+              '- Test coverage gaps if visible from the diff',
+              '',
+              'End with a clear **Verdict** section (one short paragraph): overall risk level and whether you would merge as-is, merge with minor follow-ups, or request changes — explain briefly.',
+              '',
+              guidanceText
+                ? 'Use the following repository guidance when judging style and conventions (do not quote it verbatim unless needed):\n\n' + guidanceText + '\n\n'
+                : '',
+              'Return ONLY valid JSON with a single key "body" whose value is GitHub-Flavored Markdown for the PR comment (no outer markdown fences). Example shape:',
+              '{"body":"## Summary\\n..."}',
+              '',
+              'Unified diff:',
               diff,
             ].join('\n');
 
             const headers = {
               'content-type': 'application/json',
             };
-
             if (gatewayToken) {
-              headers['cf-aig-authorization'] = `Bearer ${gatewayToken}`;
+              headers['cf-aig-authorization'] = 'Bearer ' + gatewayToken;
             }
 
-            const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/compat/chat/completions`;
+            const gatewayUrl = 'https://gateway.ai.cloudflare.com/v1/' + accountId + '/' + gatewayId + '/compat/chat/completions';
 
             let response;
             try {
@@ -126,10 +170,12 @@ jobs:
                 headers,
                 body: JSON.stringify({
                   model,
+                  temperature: 0.25,
                   messages: [
                     {
                       role: 'system',
-                      content: 'You are a careful senior engineer reviewing a GitHub pull request. You produce concise inline review annotations as JSON only.',
+                      content:
+                        'You are a careful senior staff engineer doing pull request reviews. You write clear, structured Markdown for GitHub. You respond with JSON only: an object with exactly one string property "body" containing the full Markdown comment text. No prose outside JSON.',
                     },
                     {
                       role: 'user',
@@ -139,7 +185,7 @@ jobs:
                 }),
               });
             } catch (error) {
-              core.warning(`AI Gateway request failed: ${error.message}`);
+              core.warning('AI Gateway request failed: ' + error.message);
               return;
             }
 
@@ -147,69 +193,81 @@ jobs:
 
             if (!response.ok) {
               const transient =
-                response.status >= 500 ||
-                response.status === 429 ||
-                response.status === 408;
+                response.status >= 500 || response.status === 429 || response.status === 408;
               if (transient) {
-                core.warning(`AI Gateway request failed with ${response.status}: ${responseText}`);
+                core.warning('AI Gateway request failed with ' + response.status + ': ' + responseText.slice(0, 2000));
                 return;
               }
-              core.setFailed(`AI Gateway request failed with ${response.status}: ${responseText}`);
+              core.setFailed('AI Gateway request failed with ' + response.status + ': ' + responseText.slice(0, 2000));
               return;
             }
 
-            let content;
+            let rawModelText = '';
             try {
               const completion = JSON.parse(responseText);
-              content = completion.choices?.[0]?.message?.content || '';
+              rawModelText = completion.choices?.[0]?.message?.content || '';
             } catch (error) {
-              core.setFailed(`Could not parse AI Gateway response JSON: ${error.message}`);
+              core.setFailed('Could not parse AI Gateway envelope JSON: ' + error.message);
               return;
             }
 
-            let review;
+            const stripFences = (s) =>
+              String(s || '')
+                .replace(/^\s*```(?:json)?\s*/i, '')
+                .replace(/\s*```\s*$/i, '')
+                .trim();
+
+            let bodyMarkdown = '';
+            const stripped = stripFences(rawModelText);
             try {
-              review = JSON.parse(content.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, ''));
-            } catch (error) {
-              core.setFailed(`Model did not return valid review JSON: ${error.message}\n${content}`);
-              return;
-            }
-
-            const annotations = Array.isArray(review.annotations) ? review.annotations.slice(0, 20) : [];
-
-            if (annotations.length === 0) {
-              core.info('AI review completed with no annotations.');
-              return;
-            }
-
-            const escapeCommandValue = (value) =>
-              String(value ?? '')
-                .replace(/%/g, '%25')
-                .replace(/\r/g, '%0D')
-                .replace(/\n/g, '%0A');
-
-            const escapeCommandProperty = (value) =>
-              escapeCommandValue(value)
-                .replace(/:/g, '%3A')
-                .replace(/,/g, '%2C');
-
-            const commandBySeverity = {
-              notice: 'notice',
-              warning: 'warning',
-              failure: 'error',
-            };
-
-            for (const annotation of annotations) {
-              const path = escapeCommandProperty(String(annotation.path || '').trim());
-              const line = Number.parseInt(annotation.line, 10);
-              const command = commandBySeverity[annotation.severity] || 'warning';
-              const title = escapeCommandProperty(annotation.title || 'AI code review');
-              const message = escapeCommandValue(annotation.message || '');
-
-              if (!path || !Number.isInteger(line) || line < 1 || !message) {
-                core.warning(`Skipping malformed annotation: ${JSON.stringify(annotation)}`);
-                continue;
+              const parsed = JSON.parse(stripped);
+              if (parsed && typeof parsed.body === 'string' && parsed.body.trim()) {
+                bodyMarkdown = parsed.body.trim();
               }
+            } catch (e) {
+              core.info('Model output was not valid JSON with a body field; using raw text if usable.');
+            }
 
-              console.log(`::${command} file=${path},line=${line},title=${title}::${message}`);
+            if (!bodyMarkdown) {
+              if (stripped.length > 80 && /(^|\n)#+\s/.test(stripped)) {
+                bodyMarkdown = stripped;
+              } else {
+                core.warning('Model did not return usable review content. First 500 chars: ' + stripped.slice(0, 500));
+                return;
+              }
+            }
+
+            if (bodyMarkdown.length > MAX_COMMENT_CHARS) {
+              bodyMarkdown =
+                bodyMarkdown.slice(0, MAX_COMMENT_CHARS - 200) +
+                '\n\n_(Comment truncated for GitHub length limits.)_';
+            }
+
+            const commentBody = STICKY_MARKER + '\n\n## AI code review\n\n' + bodyMarkdown;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: pull_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((c) => c.user && c.body && c.body.includes(STICKY_MARKER));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: commentBody,
+              });
+              core.info('Updated existing sticky AI review comment ' + existing.id + '.');
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pull_number,
+                body: commentBody,
+              });
+              core.info('Created new sticky AI review comment on PR #' + pull_number + '.');
             }
