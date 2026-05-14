@@ -61,6 +61,7 @@ jobs:
     permissions:
       contents: write      # Required to clone the target repository and push the auto-generated `release/<new-version>` branch using the persisted GITHUB_TOKEN.
       pull-requests: write # Required so `gh pr create` can open the draft release pull request against the module's target branch.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2

@@ -18,6 +18,7 @@ jobs:
     permissions:
       contents: read       # Required for actions/checkout to clone the (private) caller repository (both head and base refs).
       pull-requests: write # Required so the actions/github-script step can create or update the size-audit comment on pull requests.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout

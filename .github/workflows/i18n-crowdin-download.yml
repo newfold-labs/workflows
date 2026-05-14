@@ -30,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required for actions/checkout to clone the (private) caller repository. The Crowdin action uses NEWFOLD_ACCESS_TOKEN (a PAT) for any branch push or PR creation, so the workflow's GITHUB_TOKEN does not need write scopes.
+    timeout-minutes: 20
 
     steps:
       - name: Checkout

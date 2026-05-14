@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required for actions/checkout to clone the (private) caller repository so yamllint can scan its YAML files.
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -122,6 +123,7 @@ jobs:
     permissions:
       security-events: write # Required so github/codeql-action/upload-sarif can publish Poutine results to the repository's code scanning alerts.
       contents: read         # Required for actions/checkout to clone the (private) caller repository so Poutine can scan its build pipelines.
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -152,6 +154,7 @@ jobs:
       security-events: write # Required so the zizmor action can publish SARIF results to the repository's code scanning alerts.
       actions: read          # Required by the zizmor action to inspect workflow run metadata while scanning.
       contents: read         # Required for actions/checkout to clone the (private) caller repository so zizmor can scan its workflow files.
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

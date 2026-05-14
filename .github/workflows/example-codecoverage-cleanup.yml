@@ -38,6 +38,7 @@ jobs:
     permissions:
       contents: read       # Required so `gh api` can read the (potentially private) repository's pull request resource.
       pull-requests: read  # Required so `gh api repos/{owner}/{repo}/pulls/{number}/commits` can list the merged pull request's commits.
+    timeout-minutes: 5
     outputs:
       shas: ${{ steps.shas.outputs.list }}
     steps:

@@ -34,6 +34,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     permissions:
       contents: read # Required for actions/checkout to clone the repository so pytest can run against the translation script sources.
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
