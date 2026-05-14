@@ -102,11 +102,6 @@ jobs:
             module: 'facebook'
             only-module-tests: false
 
-          # Merge Web.com matrix rows with display name and plugin repo (required for excludes / child workflow).
-          - brand: 'web.com'
-            name: 'Web.com'
-            plugin-repo: 'newfold-labs/wp-plugin-web'
-
           # Include one job for each retired brand plugin.
           # These retired brand plugins still use Cypress tests, but we've migrated to Playwright.
           # - brand: 'crazydomains'
@@ -130,6 +125,22 @@ jobs:
           - brand: 'web.com'
             name: 'Web.com'
             plugin-repo: 'newfold-labs/wp-plugin-web'
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+            module: 'notifications'
+            secondary-module-repo: 'performance'
+            only-module-tests: true
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+            module: 'secure-passwords'
+            only-module-tests: false
+          - brand: 'web.com'
+            name: 'Web.com'
+            plugin-repo: 'newfold-labs/wp-plugin-web'
+            module: 'notifications'
+            only-module-tests: false
 
     uses: ./.github/workflows/module-plugin-test-playwright.yml
     with:
