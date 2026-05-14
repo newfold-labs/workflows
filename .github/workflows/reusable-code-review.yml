@@ -29,7 +29,7 @@ on:
         description: Optional override for gateway id; if empty, uses vars.CLOUDFLARE_AI_GATEWAY_ID
         type: string
         required: false
-        default: ''
+        default: github-action-workflows
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         description: Cloudflare account id for AI Gateway URL
