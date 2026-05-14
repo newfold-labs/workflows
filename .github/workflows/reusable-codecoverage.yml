@@ -54,12 +54,16 @@ on:
         description: GitHub token for committing to gh-pages
         required: false
 
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured at the job level.
+permissions: {}
+
 jobs:
 
   check_gh_pages:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read # Required for actions/checkout to clone the (private) caller repository so we can ask the remote about the gh-pages branch.
     outputs:
       has_gh_pages: ${{ steps.check.outputs.has_gh_pages }}
     steps:
@@ -83,11 +87,8 @@ jobs:
     if: needs.check_gh_pages.outputs.has_gh_pages == 'true'
     runs-on: ubuntu-latest
     permissions:
-      # Write access is needed to commit coverage reports to gh-pages branch
-      # (write permission includes read access for checkout)
-      contents: write
-      # Write access is needed to post comments on pull requests
-      pull-requests: write
+      contents: write      # Required to clone the (private) caller repository and to commit/push code coverage reports to the gh-pages branch (write implies read).
+      pull-requests: write # Required so the mshick/add-pr-comment step can create or update the coverage report comment on pull requests.
 
     services:
       mysql:

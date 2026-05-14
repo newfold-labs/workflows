@@ -7,13 +7,17 @@ env:
   MAX_IMAGE_SIZE_KB: 500
   MAX_PHP_SIZE_INCREASE_PERCENT: 15
 
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured at the job level.
+permissions: {}
+
 jobs:
   audit:
     name: Audit Plugin Size
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: write
+      contents: read       # Required for actions/checkout to clone the (private) caller repository (both head and base refs).
+      pull-requests: write # Required so the actions/github-script step can create or update the size-audit comment on pull requests.
 
     steps:
       - name: Checkout

@@ -27,14 +27,17 @@ on:
     # Weekly on Sunday at 00:00 UTC
     - cron: '0 0 * * 0'
 
-# Permissions set per-job to avoid overly broad write at workflow level.
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured at the job level.
+permissions: {}
+
 jobs:
   get-merged-pr-commits:
     if: github.repository != 'newfold-labs/workflows' && github.event_name == 'pull_request' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
+      contents: read       # Required so `gh api` can read the (potentially private) repository's pull request resource.
+      pull-requests: read  # Required so `gh api repos/{owner}/{repo}/pulls/{number}/commits` can list the merged pull request's commits.
     outputs:
       shas: ${{ steps.shas.outputs.list }}
     steps:
@@ -49,7 +52,7 @@ jobs:
     needs: get-merged-pr-commits
     if: github.repository != 'newfold-labs/workflows' && always() && needs.get-merged-pr-commits.result == 'success'
     permissions:
-      contents: write
+      contents: write # Required so the reusable workflow can commit and push the gh-pages cleanup back to the gh-pages branch.
     uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
     with:
       shas: ${{ needs.get-merged-pr-commits.outputs.shas }}
@@ -60,7 +63,7 @@ jobs:
   cleanup-on-branch-delete:
     if: github.repository != 'newfold-labs/workflows' && github.event_name == 'delete' && github.event.ref_type == 'branch'
     permissions:
-      contents: write
+      contents: write # Required so the reusable workflow can commit and push the gh-pages cleanup back to the gh-pages branch.
     uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
     with:
       shas: ''
@@ -71,7 +74,7 @@ jobs:
   cleanup-scheduled:
     if: github.repository != 'newfold-labs/workflows' && github.event_name == 'schedule'
     permissions:
-      contents: write
+      contents: write # Required so the reusable workflow can commit (and optionally force-push the squashed history) to the gh-pages branch.
     uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
     with:
       shas: ''

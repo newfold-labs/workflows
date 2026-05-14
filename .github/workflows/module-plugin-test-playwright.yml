@@ -97,7 +97,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read # Required for actions/checkout to clone the (private) plugin repository.
     env:
       MODULE_REPO: ${{ inputs.module-repo }}
     steps:

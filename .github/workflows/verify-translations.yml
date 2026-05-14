@@ -27,8 +27,8 @@ jobs:
   translate:
     name: 'Check and update translations'
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write      # Required so the reusable translations workflow can push the auto-translate branch and the eventual translation commit.
+      pull-requests: write # Required so the reusable translations workflow can open the translations pull request.
     uses: ./.github/workflows/reusable-translations.yml
     with:
       text_domain: 'newfold-labs-workflows'

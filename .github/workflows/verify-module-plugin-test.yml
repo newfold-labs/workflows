@@ -31,7 +31,7 @@ jobs:
   verify-module-plugin-test:
     name: ${{ matrix.name }} (${{ format( '{0}{1}{2}', matrix.module, ( matrix.secondary-module-repo && format( '{0}{1}', ' with ', matrix.secondary-module-repo ) || '' ), ( ! matrix.only-module-tests && ' - all tests' || '' ) ) }})
     permissions:
-      contents: read
+      contents: read # Required so the called module-plugin-test-playwright workflow can use actions/checkout to clone the target plugin repository.
     strategy:
       fail-fast: false
       matrix:
