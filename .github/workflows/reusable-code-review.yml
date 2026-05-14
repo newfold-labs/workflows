@@ -170,7 +170,6 @@ jobs:
                 headers,
                 body: JSON.stringify({
                   model,
-                  temperature: 0.25,
                   messages: [
                     {
                       role: 'system',
