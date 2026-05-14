@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 # Disable permissions for all available scopes by default.
-# Any needed permissions should be configured individually for each job.
+# Any needed permissions should be configured at the job level.
 permissions: {}
 
 jobs:
@@ -31,4 +31,4 @@ jobs:
       security-events: write # Required so the reusable workflow's octoscan/poutine/zizmor jobs can upload SARIF results to the repository's code scanning alerts.
       actions: read          # Required by github/codeql-action/upload-sarif (and zizmor) inside the reusable workflow to inspect workflow run metadata.
       contents: read         # Required so the reusable workflow's actions/checkout steps can clone this repository before scanning its workflow files.
-    uses: ./.github/workflows/reusable-workflow-lint.yml
+    uses: newfold-labs/workflows/.github/workflows/reusable-workflow-lint.yml@${{ github.sha }}
