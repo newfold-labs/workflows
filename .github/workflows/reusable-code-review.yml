@@ -11,7 +11,9 @@
 #   - CLOUDFLARE_ACCOUNT_ID
 #   - CLOUDFLARE_AI_GATEWAY_TOKEN
 #
-# Optional: set repo/org variable or override via inputs on future workflow_call versions.
+# Gateway id (URL segment): set org or repo variable CLOUDFLARE_AI_GATEWAY_ID, or pass
+# workflow input cloudflare_ai_gateway_id from the caller. Variable is preferred so all
+# repos share one gateway name without pinning it in YAML.
 ##
 name: Reusable AI Code Review
 
@@ -24,10 +26,10 @@ on:
         required: false
         default: openai/gpt-5
       cloudflare_ai_gateway_id:
-        description: Cloudflare AI Gateway id segment (path after account id)
+        description: Optional override for gateway id; if empty, uses vars.CLOUDFLARE_AI_GATEWAY_ID
         type: string
         required: false
-        default: github-actions-workflows
+        default: ''
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         description: Cloudflare account id for AI Gateway URL
@@ -42,7 +44,6 @@ jobs:
   review:
     name: Review PR diff
     runs-on: ubuntu-latest
-    environment: cloudflare-ai-code-review
     permissions:
       contents: read
       pull-requests: read
@@ -51,7 +52,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_AI_GATEWAY_ID: ${{ inputs.cloudflare_ai_gateway_id }}
+          CLOUDFLARE_AI_GATEWAY_ID: ${{ inputs.cloudflare_ai_gateway_id || vars.CLOUDFLARE_AI_GATEWAY_ID }}
           CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ secrets.CLOUDFLARE_AI_GATEWAY_TOKEN }}
           AI_REVIEW_MODEL: ${{ inputs.ai_review_model }}
         with:
@@ -67,7 +68,7 @@ jobs:
             }
 
             if (!gatewayId || !gatewayToken) {
-              core.setFailed('Set CLOUDFLARE_AI_GATEWAY_ID and CLOUDFLARE_AI_GATEWAY_TOKEN in your AI Gateway authentication setup.');
+              core.setFailed('Missing gateway id or token. Set org/repo variable CLOUDFLARE_AI_GATEWAY_ID (or pass workflow input cloudflare_ai_gateway_id) and secret CLOUDFLARE_AI_GATEWAY_TOKEN.');
               return;
             }
 
