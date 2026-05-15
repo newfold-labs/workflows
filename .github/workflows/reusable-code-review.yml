@@ -194,7 +194,7 @@ jobs:
             const systemFromFile = sSplit.length >= 2 ? sSplit.slice(1).join('').trim() : '';
             const systemFinal =
               systemFromFile ||
-              'You are a careful senior staff engineer doing pull request reviews. You write clear, structured Markdown for GitHub. You respond with JSON only: an object with exactly one string property "body" containing the full Markdown comment text. No prose outside JSON.';
+              'You are a careful senior staff engineer doing pull request reviews. You write clear, structured Markdown for GitHub. You respond with JSON only: an object with exactly one string property "body" containing the full Markdown comment text. No prose outside JSON. When prior human PR reviews appear in the user message, compare them to the current diff where the user template asks.';
 
             let guidanceText = '';
             try {
@@ -237,11 +237,63 @@ jobs:
                 '\n\n'
               : '';
 
+            let existingHumanReviews = '_No prior submitted human PR reviews with bodies on this pull request._';
+            try {
+              const allReviews = await github.paginate(github.rest.pulls.listReviews, {
+                owner: baseOwner,
+                repo: baseRepo,
+                pull_number,
+                per_page: 30,
+              });
+              const humanWithBody = allReviews.filter(
+                (r) =>
+                  r &&
+                  r.body &&
+                  String(r.body).trim() &&
+                  r.user &&
+                  r.user.type !== 'Bot' &&
+                  r.state !== 'PENDING',
+              );
+              humanWithBody.sort((a, b) => String(b.submitted_at || '').localeCompare(String(a.submitted_at || '')));
+              const parts = [];
+              let used = 0;
+              const maxTotal = 10000;
+              for (const r of humanWithBody) {
+                const login = r.user.login || 'unknown';
+                const state = r.state || '';
+                const shaShort = (r.commit_id || '').slice(0, 7);
+                const bodySlice = String(r.body).trim().slice(0, 2500);
+                const chunk =
+                  '#### Review by @' +
+                  login +
+                  ' (' +
+                  state +
+                  (shaShort ? '; commit ' + shaShort : '') +
+                  ')\n\n' +
+                  bodySlice +
+                  '\n\n';
+                if (used + chunk.length > maxTotal) {
+                  break;
+                }
+                parts.push(chunk);
+                used += chunk.length;
+              }
+              if (parts.length > 0) {
+                existingHumanReviews =
+                  'Submitted **human** PR reviews (newest first; bodies truncated per review). Compare against the **current** unified diff below.\n\n' +
+                  parts.join('---\n\n');
+              }
+            } catch (e) {
+              core.info('listReviews failed: ' + (e.message || e));
+              existingHumanReviews = '_Prior reviews could not be loaded from the API._';
+            }
+
             const replacements = {
               '{{REPOSITORY}}': baseOwner + '/' + baseRepo,
               '{{PR_TITLE}}': prTitle,
               '{{PR_BODY}}': prBody,
               '{{GUIDANCE_BLOCK}}': guidanceBlock,
+              '{{EXISTING_HUMAN_REVIEWS}}': existingHumanReviews,
               '{{DIFF}}': diff,
             };
 
