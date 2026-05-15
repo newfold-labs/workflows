@@ -27,7 +27,7 @@ jobs:
   review:
     if: github.repository != 'newfold-labs/workflows' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.fork == false
     name: Review PR diff
-    uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@a2860e6a32934e332b6e1e7aebfb82340dfab353
+    uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@add/code-review
     permissions:
       contents: read
       pull-requests: write
