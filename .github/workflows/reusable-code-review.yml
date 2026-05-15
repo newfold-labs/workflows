@@ -16,7 +16,8 @@
 # Gateway id (URL segment): set org or repo variable CLOUDFLARE_AI_GATEWAY_ID, or pass
 # workflow input cloudflare_ai_gateway_id from the caller.
 #
-# Posts one sticky PR comment (updated on each run), similar to anthropics/claude-code-action + use_sticky_comment.
+# Posts one sticky PR comment (updated on each run) plus optional workflow file/line annotations.
+# Caller: pull-requests: write and checks: write.
 ##
 name: Reusable AI Code Review
 
@@ -60,8 +61,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      checks: write
     steps:
-      - name: Post AI review as PR comment (Cloudflare AI Gateway)
+      - name: Post AI review (PR comment + optional check annotations)
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -194,7 +196,7 @@ jobs:
             const systemFromFile = sSplit.length >= 2 ? sSplit.slice(1).join('').trim() : '';
             const systemFinal =
               systemFromFile ||
-              'You are a careful senior staff engineer doing pull request reviews. You write clear, structured Markdown for GitHub. You respond with JSON only: an object with exactly one string property "body" containing the full Markdown comment text. No prose outside JSON. When prior human PR reviews appear in the user message, compare them to the current diff where the user template asks.';
+              'You are a careful senior staff engineer doing pull request reviews. You write clear, structured Markdown for GitHub. You respond with JSON only: an object with required string property "body" (Markdown PR comment) and optional array "annotations" for CI file/line annotations (see user template). No prose outside JSON. When prior human PR reviews appear in the user message, compare them to the current diff where the user template asks.';
 
             let guidanceText = '';
             try {
@@ -364,11 +366,12 @@ jobs:
                 .trim();
 
             let bodyMarkdown = '';
+            let reviewPayload = null;
             const stripped = stripFences(rawModelText);
             try {
-              const parsed = JSON.parse(stripped);
-              if (parsed && typeof parsed.body === 'string' && parsed.body.trim()) {
-                bodyMarkdown = parsed.body.trim();
+              reviewPayload = JSON.parse(stripped);
+              if (reviewPayload && typeof reviewPayload.body === 'string' && reviewPayload.body.trim()) {
+                bodyMarkdown = reviewPayload.body.trim();
               }
             } catch (e) {
               core.info('Model output was not valid JSON with a body field; using raw text if usable.');
@@ -416,4 +419,44 @@ jobs:
                 body: commentBody,
               });
               core.info('Created new sticky AI review comment on PR #' + pull_number + '.');
+            }
+
+            const emitWorkflowAnnotations = (parsed) => {
+              const annotations = Array.isArray(parsed?.annotations) ? parsed.annotations.slice(0, 20) : [];
+              if (annotations.length === 0) {
+                return;
+              }
+              const escapeCommandValue = (value) =>
+                String(value ?? '')
+                  .replace(/%/g, '%25')
+                  .replace(/\r/g, '%0D')
+                  .replace(/\n/g, '%0A');
+              const escapeCommandProperty = (value) =>
+                escapeCommandValue(value).replace(/:/g, '%3A').replace(/,/g, '%2C');
+              const commandBySeverity = {
+                notice: 'notice',
+                warning: 'warning',
+                failure: 'error',
+              };
+              let emitted = 0;
+              for (const annotation of annotations) {
+                const path = escapeCommandProperty(String(annotation.path || '').trim());
+                const line = Number.parseInt(annotation.line, 10);
+                const command = commandBySeverity[annotation.severity] || 'warning';
+                const title = escapeCommandProperty(annotation.title || 'AI code review');
+                const message = escapeCommandValue(annotation.message || '');
+                if (!path || !Number.isInteger(line) || line < 1 || !message) {
+                  core.warning('Skipping malformed annotation: ' + JSON.stringify(annotation));
+                  continue;
+                }
+                console.log('::' + command + ' file=' + path + ',line=' + line + ',title=' + title + '::' + message);
+                emitted += 1;
+              }
+              if (emitted > 0) {
+                core.info('Emitted ' + emitted + ' workflow file/line annotation(s).');
+              }
+            };
+
+            if (reviewPayload) {
+              emitWorkflowAnnotations(reviewPayload);
             }
