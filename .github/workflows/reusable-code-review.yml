@@ -1,6 +1,8 @@
 ##
 # Reusable workflow: AI pull request review via Cloudflare AI Gateway (PR comment, Claude-style).
 #
+# Prompts live in this repo (edit .github/ai-code-review/pr-review-prompt.md — no YAML edits needed).
+#
 # Consumer repos:
 #   uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@<full-commit-sha>
 #   secrets:
@@ -36,6 +38,11 @@ on:
         type: string
         required: false
         default: CLAUDE.md
+      prompt_template_path:
+        description: Path in the workflows repo to the markdown prompt (## System message / ## User message template)
+        type: string
+        required: false
+        default: .github/ai-code-review/pr-review-prompt.md
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         description: Cloudflare account id for AI Gateway URL
@@ -62,6 +69,7 @@ jobs:
           CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ secrets.CLOUDFLARE_AI_GATEWAY_TOKEN }}
           AI_REVIEW_MODEL: ${{ inputs.ai_review_model }}
           GUIDANCE_FILE: ${{ inputs.guidance_file }}
+          PROMPT_TEMPLATE_PATH: ${{ inputs.prompt_template_path }}
         with:
           script: |
             const STICKY_MARKER = '<!-- ai-gateway-pr-review:v1 -->';
@@ -78,6 +86,9 @@ jobs:
             const gatewayToken = process.env.CLOUDFLARE_AI_GATEWAY_TOKEN;
             const model = process.env.AI_REVIEW_MODEL || 'openai/gpt-5';
             const guidancePath = (process.env.GUIDANCE_FILE || 'CLAUDE.md').trim() || 'CLAUDE.md';
+            const promptPath = (process.env.PROMPT_TEMPLATE_PATH || '.github/ai-code-review/pr-review-prompt.md')
+              .replace(/^\/+/, '')
+              .trim();
 
             if (!accountId) {
               core.setFailed('Missing required secret: CLOUDFLARE_ACCOUNT_ID');
@@ -89,15 +100,108 @@ jobs:
               return;
             }
 
-            const { owner, repo } = context.repo;
+            const wfOwner = context.repo.owner;
+            const wfRepo = context.repo.repo;
+
+            const prRepo = context.payload.repository;
+            const baseOwner = prRepo.owner.login;
+            const baseRepo = prRepo.name;
+            const headOwner = pr.head.repo.owner.login;
+            const headRepo = pr.head.repo.name;
             const pull_number = pr.number;
+
+            const workflowRef = process.env.GITHUB_WORKFLOW_REF || '';
+            const at = workflowRef.lastIndexOf('@');
+            let promptsRef = at >= 0 ? workflowRef.slice(at + 1).trim() : '';
+            if (!promptsRef) {
+              promptsRef = 'main';
+              core.info('GITHUB_WORKFLOW_REF had no @ref; using "main" to load prompts from ' + wfOwner + '/' + wfRepo + '.');
+            }
+
+            async function loadPromptMarkdown() {
+              const decodeFile = (data) => {
+                if (data && !Array.isArray(data) && data.type === 'file' && data.encoding === 'base64' && data.content) {
+                  return Buffer.from(data.content, 'base64').toString('utf8');
+                }
+                throw new Error('Unexpected getContent payload');
+              };
+
+              const tryRefs = [promptsRef];
+              if (promptsRef.startsWith('refs/heads/')) {
+                tryRefs.push(promptsRef.replace(/^refs\/heads\//, ''));
+              }
+              if (promptsRef.startsWith('refs/tags/')) {
+                tryRefs.push(promptsRef.replace(/^refs\/tags\//, ''));
+              }
+
+              for (const ref of tryRefs) {
+                try {
+                  const { data } = await github.rest.repos.getContent({
+                    owner: wfOwner,
+                    repo: wfRepo,
+                    path: promptPath,
+                    ref,
+                  });
+                  return decodeFile(data);
+                } catch (e) {
+                  core.info('repos.getContent prompt ref=' + ref + ': ' + (e.message || e));
+                }
+              }
+
+              let refRaw = promptsRef;
+              if (refRaw.startsWith('refs/heads/')) refRaw = refRaw.slice('refs/heads/'.length);
+              if (refRaw.startsWith('refs/tags/')) refRaw = refRaw.slice('refs/tags/'.length);
+              const encodedPath = promptPath
+                .split('/')
+                .map((segment) => encodeURIComponent(segment))
+                .join('/');
+              const rawUrl =
+                'https://raw.githubusercontent.com/' +
+                wfOwner +
+                '/' +
+                wfRepo +
+                '/' +
+                encodeURIComponent(refRaw) +
+                '/' +
+                encodedPath;
+              core.info('Trying raw.githubusercontent.com: ' + rawUrl);
+              const r = await fetch(rawUrl);
+              if (!r.ok) {
+                const t = await r.text();
+                throw new Error('raw fetch ' + r.status + ': ' + t.slice(0, 300));
+              }
+              return await r.text();
+            }
+
+            let fullMd = '';
+            try {
+              fullMd = await loadPromptMarkdown();
+            } catch (e) {
+              core.setFailed(
+                'Could not load prompt markdown from ' + wfOwner + '/' + wfRepo + ' path ' + promptPath + ' (ref ' + promptsRef + '): ' + e.message,
+              );
+              return;
+            }
+
+            const uSplit = fullMd.split(/^##\s*User message template\s*$/m);
+            if (uSplit.length < 2) {
+              core.setFailed('Prompt file must contain a heading "## User message template" (see ' + promptPath + ').');
+              return;
+            }
+            const beforeUser = uSplit[0];
+            const userTemplate = uSplit.slice(1).join('').trim();
+            const sSplit = beforeUser.split(/^##\s*System message\s*$/m);
+            const systemFromFile = sSplit.length >= 2 ? sSplit.slice(1).join('').trim() : '';
+            const systemFinal =
+              systemFromFile ||
+              'You are a careful senior staff engineer doing pull request reviews. You write clear, structured Markdown for GitHub. You respond with JSON only: an object with exactly one string property "body" containing the full Markdown comment text. No prose outside JSON.';
 
             let guidanceText = '';
             try {
               const ref = pr.head.sha;
               const { data } = await github.rest.repos.getContent({
-                owner,
-                repo,
+                owner: headOwner,
+                repo: headRepo,
                 path: guidancePath,
                 ref,
               });
@@ -105,12 +209,12 @@ jobs:
                 guidanceText = Buffer.from(data.content, 'base64').toString('utf8').slice(0, 32000);
               }
             } catch (e) {
-              core.info('No guidance file at ' + guidancePath + ' for ref ' + pr.head.sha + ' (' + (e.message || e) + '). Continuing without.');
+              core.info('No guidance file at ' + guidancePath + ' on ' + headOwner + '/' + headRepo + '@' + pr.head.sha + ' (' + (e.message || e) + '). Continuing without.');
             }
 
             const diffResponse = await github.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', {
-              owner,
-              repo,
+              owner: baseOwner,
+              repo: baseRepo,
               pull_number,
               headers: {
                 accept: 'application/vnd.github.v3.diff',
@@ -127,32 +231,24 @@ jobs:
             const prTitle = pr.title || '';
             const prBody = (pr.body || '').slice(0, 8000);
 
-            const prompt = [
-              'Repository: ' + owner + '/' + repo,
-              'PR title: ' + prTitle,
-              'PR description (truncated):',
-              prBody,
-              '',
-              'Review the pull request unified diff below. Produce a thorough, constructive review similar in spirit to an experienced human reviewer leaving one GitHub PR comment.',
-              '',
-              'Cover explicitly:',
-              '- What this PR does well (strengths)',
-              '- Minor suggestions / nits (non-blocking)',
-              '- Potential bugs, reliability, or performance concerns',
-              '- Security implications if any (call out severity)',
-              '- Test coverage gaps if visible from the diff',
-              '',
-              'End with a clear **Verdict** section (one short paragraph): overall risk level and whether you would merge as-is, merge with minor follow-ups, or request changes — explain briefly.',
-              '',
-              guidanceText
-                ? 'Use the following repository guidance when judging style and conventions (do not quote it verbatim unless needed):\n\n' + guidanceText + '\n\n'
-                : '',
-              'Return ONLY valid JSON with a single key "body" whose value is GitHub-Flavored Markdown for the PR comment (no outer markdown fences). Example shape:',
-              '{"body":"## Summary\\n..."}',
-              '',
-              'Unified diff:',
-              diff,
-            ].join('\n');
+            const guidanceBlock = guidanceText
+              ? 'Use the following repository guidance when judging style and conventions (do not quote it verbatim unless needed):\n\n' +
+                guidanceText +
+                '\n\n'
+              : '';
+
+            const replacements = {
+              '{{REPOSITORY}}': baseOwner + '/' + baseRepo,
+              '{{PR_TITLE}}': prTitle,
+              '{{PR_BODY}}': prBody,
+              '{{GUIDANCE_BLOCK}}': guidanceBlock,
+              '{{DIFF}}': diff,
+            };
+
+            let userPrompt = userTemplate;
+            for (const [token, value] of Object.entries(replacements)) {
+              userPrompt = userPrompt.split(token).join(value);
+            }
 
             const headers = {
               'content-type': 'application/json',
@@ -173,12 +269,11 @@ jobs:
                   messages: [
                     {
                       role: 'system',
-                      content:
-                        'You are a careful senior staff engineer doing pull request reviews. You write clear, structured Markdown for GitHub. You respond with JSON only: an object with exactly one string property "body" containing the full Markdown comment text. No prose outside JSON.',
+                      content: systemFinal,
                     },
                     {
                       role: 'user',
-                      content: prompt,
+                      content: userPrompt,
                     },
                   ],
                 }),
@@ -245,8 +340,8 @@ jobs:
             const commentBody = STICKY_MARKER + '\n\n## AI code review\n\n' + bodyMarkdown;
 
             const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
+              owner: baseOwner,
+              repo: baseRepo,
               issue_number: pull_number,
               per_page: 100,
             });
@@ -255,16 +350,16 @@ jobs:
 
             if (existing) {
               await github.rest.issues.updateComment({
-                owner,
-                repo,
+                owner: baseOwner,
+                repo: baseRepo,
                 comment_id: existing.id,
                 body: commentBody,
               });
               core.info('Updated existing sticky AI review comment ' + existing.id + '.');
             } else {
               await github.rest.issues.createComment({
-                owner,
-                repo,
+                owner: baseOwner,
+                repo: baseRepo,
                 issue_number: pull_number,
                 body: commentBody,
               });
