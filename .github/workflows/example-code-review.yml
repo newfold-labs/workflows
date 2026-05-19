@@ -5,6 +5,7 @@
 #   - Pin `uses: ...@<full-40-char-commit-sha>` (supply chain / zizmor); bump when workflows changes.
 #   - Add repository (or org) secrets: CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_AI_GATEWAY_TOKEN.
 #   - Set org or repo variable CLOUDFLARE_AI_GATEWAY_ID (gateway id segment; not a secret).
+#   - Pass prompts_ref matching uses ...@ref (e.g. add/code-review until merged to main).
 #
 # Forked pull_request workflows do not receive secrets; the reusable workflow is skipped
 # when `head.repo.fork` is true (see caller `if` below). Same-repo PRs only.
@@ -27,7 +28,9 @@ jobs:
   review:
     if: github.repository != 'newfold-labs/workflows' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.fork == false
     name: Review PR diff
-    uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@add/code-review
+    uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@a2860e6a32934e332b6e1e7aebfb82340dfab353
+    with:
+      prompts_ref: add/code-review
     permissions:
       contents: read
       pull-requests: write
