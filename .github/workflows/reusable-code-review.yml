@@ -2,6 +2,8 @@
 # Reusable workflow: AI pull request review via Cloudflare AI Gateway (PR comment, Claude-style).
 #
 # Prompts live in this repo (edit .github/ai-code-review/pr-review-prompt.md — no YAML edits needed).
+# When called from consumer repos, prompts load from prompts_repository (default newfold-labs/workflows)
+# at github.workflow_sha — not from the consumer repo (context.repo).
 #
 # Consumer repos:
 #   uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@<full-commit-sha>
@@ -44,6 +46,16 @@ on:
         type: string
         required: false
         default: .github/ai-code-review/pr-review-prompt.md
+      prompts_repository:
+        description: Owner/repo where the prompt markdown lives (not the PR consumer repo)
+        type: string
+        required: false
+        default: newfold-labs/workflows
+      prompts_ref:
+        description: Git ref for the prompt file; empty uses github.workflow_sha (commit of this reusable workflow)
+        type: string
+        required: false
+        default: ''
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         description: Cloudflare account id for AI Gateway URL
@@ -72,6 +84,8 @@ jobs:
           AI_REVIEW_MODEL: ${{ inputs.ai_review_model }}
           GUIDANCE_FILE: ${{ inputs.guidance_file }}
           PROMPT_TEMPLATE_PATH: ${{ inputs.prompt_template_path }}
+          PROMPTS_REPOSITORY: ${{ inputs.prompts_repository }}
+          PROMPTS_REF_OVERRIDE: ${{ inputs.prompts_ref }}
         with:
           script: |
             const STICKY_MARKER = '<!-- ai-gateway-pr-review:v1 -->';
@@ -102,8 +116,14 @@ jobs:
               return;
             }
 
-            const wfOwner = context.repo.owner;
-            const wfRepo = context.repo.repo;
+            const promptsRepoSlug = (process.env.PROMPTS_REPOSITORY || 'newfold-labs/workflows').trim();
+            const promptsRepoParts = promptsRepoSlug.split('/').filter(Boolean);
+            if (promptsRepoParts.length !== 2) {
+              core.setFailed('prompts_repository must be owner/repo (e.g. newfold-labs/workflows).');
+              return;
+            }
+            const promptsOwner = promptsRepoParts[0];
+            const promptsRepo = promptsRepoParts[1];
 
             const prRepo = context.payload.repository;
             const baseOwner = prRepo.owner.login;
@@ -112,13 +132,53 @@ jobs:
             const headRepo = pr.head.repo.name;
             const pull_number = pr.number;
 
-            const workflowRef = process.env.GITHUB_WORKFLOW_REF || '';
-            const at = workflowRef.lastIndexOf('@');
-            let promptsRef = at >= 0 ? workflowRef.slice(at + 1).trim() : '';
-            if (!promptsRef) {
-              promptsRef = 'main';
-              core.info('GITHUB_WORKFLOW_REF had no @ref; using "main" to load prompts from ' + wfOwner + '/' + wfRepo + '.');
-            }
+            const parseCalledWorkflowRef = (workflowRef) => {
+              const at = workflowRef.lastIndexOf('@');
+              if (at < 0) return null;
+              const pathPart = workflowRef.slice(0, at).trim();
+              const ref = workflowRef.slice(at + 1).trim();
+              const firstSlash = pathPart.indexOf('/');
+              if (firstSlash < 0) return null;
+              const owner = pathPart.slice(0, firstSlash);
+              const afterOwner = pathPart.slice(firstSlash + 1);
+              const secondSlash = afterOwner.indexOf('/');
+              if (secondSlash < 0) return null;
+              const repo = afterOwner.slice(0, secondSlash);
+              return { owner, repo, ref };
+            };
+
+            const resolvePromptsRef = () => {
+              const override = (process.env.PROMPTS_REF_OVERRIDE || '').trim();
+              if (override) {
+                return override;
+              }
+              const workflowSha =
+                (typeof github.workflow_sha === 'string' && github.workflow_sha) ||
+                (process.env.GITHUB_WORKFLOW_SHA || '').trim();
+              if (workflowSha) {
+                core.info('Using github.workflow_sha for prompts: ' + workflowSha);
+                return workflowSha;
+              }
+              const workflowRef = process.env.GITHUB_WORKFLOW_REF || '';
+              const parsed = parseCalledWorkflowRef(workflowRef);
+              if (
+                parsed &&
+                parsed.owner === promptsOwner &&
+                parsed.repo === promptsRepo &&
+                parsed.ref &&
+                !parsed.ref.startsWith('refs/pull/')
+              ) {
+                core.info('Using ref from GITHUB_WORKFLOW_REF: ' + parsed.ref);
+                return parsed.ref;
+              }
+              core.info('Falling back to main for prompts (workflow_ref was: ' + workflowRef + ').');
+              return 'main';
+            };
+
+            const promptsRef = resolvePromptsRef();
+            core.info(
+              'Loading prompt from ' + promptsOwner + '/' + promptsRepo + ' @ ' + promptsRef + ' (consumer repo is ' + context.repo.owner + '/' + context.repo.repo + ').',
+            );
 
             async function loadPromptMarkdown() {
               const decodeFile = (data) => {
@@ -139,8 +199,8 @@ jobs:
               for (const ref of tryRefs) {
                 try {
                   const { data } = await github.rest.repos.getContent({
-                    owner: wfOwner,
-                    repo: wfRepo,
+                    owner: promptsOwner,
+                    repo: promptsRepo,
                     path: promptPath,
                     ref,
                   });
@@ -159,9 +219,9 @@ jobs:
                 .join('/');
               const rawUrl =
                 'https://raw.githubusercontent.com/' +
-                wfOwner +
+                promptsOwner +
                 '/' +
-                wfRepo +
+                promptsRepo +
                 '/' +
                 encodeURIComponent(refRaw) +
                 '/' +
@@ -180,7 +240,16 @@ jobs:
               fullMd = await loadPromptMarkdown();
             } catch (e) {
               core.setFailed(
-                'Could not load prompt markdown from ' + wfOwner + '/' + wfRepo + ' path ' + promptPath + ' (ref ' + promptsRef + '): ' + e.message,
+                'Could not load prompt markdown from ' +
+                  promptsOwner +
+                  '/' +
+                  promptsRepo +
+                  ' path ' +
+                  promptPath +
+                  ' (ref ' +
+                  promptsRef +
+                  '): ' +
+                  e.message,
               );
               return;
             }
