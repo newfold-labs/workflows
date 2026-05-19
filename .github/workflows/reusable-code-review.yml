@@ -3,7 +3,7 @@
 #
 # Prompts live in this repo (edit .github/ai-code-review/pr-review-prompt.md — no YAML edits needed).
 # When called from consumer repos, prompts load from prompts_repository (default newfold-labs/workflows)
-# at github.workflow_sha — not from the consumer repo (context.repo).
+# at the ref from github.workflow_ref (same as uses: ...@ref), not from the consumer repo.
 #
 # Consumer repos:
 #   uses: newfold-labs/workflows/.github/workflows/reusable-code-review.yml@<full-commit-sha>
@@ -52,7 +52,7 @@ on:
         required: false
         default: newfold-labs/workflows
       prompts_ref:
-        description: Git ref for the prompt file; empty uses github.workflow_sha (commit of this reusable workflow)
+        description: Git ref for the prompt file; empty uses github.workflow_ref (must match uses ...@ref)
         type: string
         required: false
         default: ''
@@ -86,6 +86,7 @@ jobs:
           PROMPT_TEMPLATE_PATH: ${{ inputs.prompt_template_path }}
           PROMPTS_REPOSITORY: ${{ inputs.prompts_repository }}
           PROMPTS_REF_OVERRIDE: ${{ inputs.prompts_ref }}
+          CALLED_WORKFLOW_REF: ${{ github.workflow_ref }}
         with:
           script: |
             const STICKY_MARKER = '<!-- ai-gateway-pr-review:v1 -->';
@@ -150,28 +151,34 @@ jobs:
             const resolvePromptsRef = () => {
               const override = (process.env.PROMPTS_REF_OVERRIDE || '').trim();
               if (override) {
+                core.info('Using prompts_ref input: ' + override);
                 return override;
               }
-              const workflowSha =
-                (typeof github.workflow_sha === 'string' && github.workflow_sha) ||
-                (process.env.GITHUB_WORKFLOW_SHA || '').trim();
-              if (workflowSha) {
-                core.info('Using github.workflow_sha for prompts: ' + workflowSha);
-                return workflowSha;
+
+              const refCandidates = [
+                process.env.CALLED_WORKFLOW_REF || '',
+                typeof context.workflow_ref === 'string' ? context.workflow_ref : '',
+                typeof github.workflow_ref === 'string' ? github.workflow_ref : '',
+                process.env.GITHUB_WORKFLOW_REF || '',
+              ].filter(Boolean);
+
+              for (const workflowRef of refCandidates) {
+                const parsed = parseCalledWorkflowRef(workflowRef);
+                if (
+                  parsed &&
+                  parsed.owner === promptsOwner &&
+                  parsed.repo === promptsRepo &&
+                  parsed.ref &&
+                  !parsed.ref.startsWith('refs/pull/')
+                ) {
+                  core.info('Using ref from workflow_ref (' + workflowRef + '): ' + parsed.ref);
+                  return parsed.ref;
+                }
               }
-              const workflowRef = process.env.GITHUB_WORKFLOW_REF || '';
-              const parsed = parseCalledWorkflowRef(workflowRef);
-              if (
-                parsed &&
-                parsed.owner === promptsOwner &&
-                parsed.repo === promptsRepo &&
-                parsed.ref &&
-                !parsed.ref.startsWith('refs/pull/')
-              ) {
-                core.info('Using ref from GITHUB_WORKFLOW_REF: ' + parsed.ref);
-                return parsed.ref;
-              }
-              core.info('Falling back to main for prompts (workflow_ref was: ' + workflowRef + ').');
+
+              core.info(
+                'Falling back to main for prompts. workflow_ref candidates were: ' + refCandidates.join(' | '),
+              );
               return 'main';
             };
 
@@ -191,6 +198,8 @@ jobs:
               const tryRefs = [promptsRef];
               if (promptsRef.startsWith('refs/heads/')) {
                 tryRefs.push(promptsRef.replace(/^refs\/heads\//, ''));
+              } else if (!promptsRef.startsWith('refs/')) {
+                tryRefs.push('refs/heads/' + promptsRef);
               }
               if (promptsRef.startsWith('refs/tags/')) {
                 tryRefs.push(promptsRef.replace(/^refs\/tags\//, ''));
