@@ -52,10 +52,10 @@ on:
         required: false
         default: newfold-labs/workflows
       prompts_ref:
-        description: Git ref in prompts_repository for the prompt file (must match uses ...@ref, e.g. add/code-review or a SHA)
+        description: Git ref in prompts_repository for the prompt file (must match uses ...@ref, e.g. main or a SHA)
         type: string
         required: false
-        default: add/code-review
+        default: main
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         description: Cloudflare account id for AI Gateway URL
@@ -138,7 +138,7 @@ jobs:
 
             const checkoutDir = process.env.PROMPT_CHECKOUT_DIR || '_ai_review_prompts';
             const promptsRepoSlug = (process.env.PROMPTS_REPOSITORY || 'newfold-labs/workflows').trim();
-            const promptsRef = (process.env.PROMPTS_REF || 'add/code-review').trim();
+            const promptsRef = (process.env.PROMPTS_REF || 'main').trim();
             const promptFile = path.join(checkoutDir, promptPath);
 
             core.info(
