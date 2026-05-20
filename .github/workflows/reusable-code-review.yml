@@ -183,7 +183,7 @@ jobs:
             const systemFromFile = sSplit.length >= 2 ? sSplit.slice(1).join('').trim() : '';
             const systemFinal =
               systemFromFile ||
-              'You are a careful senior staff engineer doing pull request reviews. You write clear, structured Markdown for GitHub. You respond with JSON only: an object with required string property "body" (Markdown PR comment) and optional array "annotations" for CI file/line annotations (see user template). No prose outside JSON. When prior human PR reviews appear in the user message, compare them to the current diff where the user template asks.';
+              'You are a careful senior staff engineer reviewing a pull request. Return exactly one JSON object: required "body" (GitHub-flavored Markdown) and optional "annotations" (see user message). JSON only—no code fences or prose outside the object.';
 
             let guidanceText = '';
             try {
@@ -425,12 +425,22 @@ jobs:
                 warning: 'warning',
                 failure: 'error',
               };
+              const emojiBySeverity = {
+                notice: '✅ ',
+                warning: '⚠️ ',
+                failure: '❌ ',
+              };
+              const titleHasStatusEmoji = (t) => /^(\u2705|\u26A0\uFE0F?|\u274C)\s*/u.test(t);
               let emitted = 0;
               for (const annotation of annotations) {
                 const path = escapeCommandProperty(String(annotation.path || '').trim());
                 const line = Number.parseInt(annotation.line, 10);
                 const command = commandBySeverity[annotation.severity] || 'warning';
-                const title = escapeCommandProperty(annotation.title || 'AI code review');
+                let titleRaw = String(annotation.title || 'AI code review').trim();
+                if (!titleHasStatusEmoji(titleRaw)) {
+                  titleRaw = (emojiBySeverity[annotation.severity] || '⚠️ ') + titleRaw;
+                }
+                const title = escapeCommandProperty(titleRaw);
                 const message = escapeCommandValue(annotation.message || '');
                 if (!path || !Number.isInteger(line) || line < 1 || !message) {
                   core.warning('Skipping malformed annotation: ' + JSON.stringify(annotation));
