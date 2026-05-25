@@ -58,15 +58,52 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          fetch-depth: 0
           persist-credentials: false
           show-progress: ${{ runner.debug == '1' && 'true' || 'false' }}
+
+      # On pull_request, lint only changed workflow YAML under .github/workflows/ so unrelated
+      # pre-existing issues on the base branch do not fail the PR. On push/workflow_dispatch, lint all.
+      - name: Select workflow files to lint
+        id: changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=()
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            while IFS= read -r file; do
+              [ -n "$file" ] && files+=("$file")
+            done < <(git diff --name-only --diff-filter=ACMRT "origin/${{ github.base_ref }}...HEAD" | grep -E '^\.github/workflows/.*\.(ya?ml)$' || true)
+          else
+            while IFS= read -r file; do
+              [ -n "$file" ] && files+=("$file")
+            done < <(find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) | sort)
+          fi
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No workflow files to lint for this event."
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "args<<EOF"
+            printf '%s' "-color -verbose"
+            for file in "${files[@]}"; do
+              printf ' %s' "$file"
+            done
+            printf '\n'
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "Linting ${#files[@]} workflow file(s): ${files[*]}"
 
       # actionlint is static checker for GitHub Actions workflow files.
       # See https://github.com/rhysd/actionlint.
       - name: Run actionlint
+        if: steps.changed.outputs.skip != 'true'
         uses: docker://rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 # v1.7.7
         with:
-          args: "-color -verbose"
+          args: ${{ steps.changed.outputs.args }}
 
   # Performs a security scan of GitHub Action workflow files using octoscan.
   #
