@@ -70,11 +70,15 @@ jobs:
         run: |
           set -euo pipefail
           files=()
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags origin "${{ github.base_ref }}"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            if [[ ! "$GITHUB_BASE_REF" =~ ^[0-9A-Za-z._/-]+$ ]]; then
+              echo "Unsupported base ref for lint: $GITHUB_BASE_REF" >&2
+              exit 1
+            fi
+            git fetch --no-tags origin "$GITHUB_BASE_REF"
             while IFS= read -r file; do
               [ -n "$file" ] && files+=("$file")
-            done < <(git diff --name-only --diff-filter=ACMRT "origin/${{ github.base_ref }}...HEAD" | grep -E '^\.github/workflows/.*\.(ya?ml)$' || true)
+            done < <(git diff --name-only --diff-filter=ACMRT "origin/${GITHUB_BASE_REF}...HEAD" | grep -E '^\.github/workflows/.*\.(ya?ml)$' || true)
           else
             while IFS= read -r file; do
               [ -n "$file" ] && files+=("$file")
