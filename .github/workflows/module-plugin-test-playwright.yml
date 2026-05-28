@@ -270,6 +270,10 @@ jobs:
       - name: Install WordPress
         run: npx wp-env start --debug
 
+      - name: Verify wp-env
+        working-directory: ${{ github.workspace }}
+        run: npx wp-env run cli wp core version
+
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
 
