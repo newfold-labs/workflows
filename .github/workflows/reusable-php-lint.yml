@@ -4,10 +4,10 @@ name: Reusable PHP Lint
 # syntax errors before they get merged. Designed to be called from the
 # Bluehost plugin, HostGator plugin, and any Newfold module repository.
 #
-# By default, on pull_request events only the PHP files changed in the PR
-# are linted. For all other events (push, schedule, etc.) every PHP file in
-# the repository is linted. Callers may override this behaviour via the
-# `scope` input.
+# By default, only PR-changed PHP files are linted when callers provide
+# `pr-base-sha` and `pr-head-sha`. Without those inputs, every PHP file in the
+# repository is linted. Callers may override this behaviour via the `scope`
+# input.
 #
 
 on:
@@ -19,18 +19,37 @@ on:
         default: '8.1'
       scope:
         description: >
-          Which PHP files to lint. One of 'auto' (default: 'changed' for
-          pull_request events, 'all' otherwise), 'changed' (only files
-          changed relative to the PR base ref), or 'all' (every PHP file
-          in the repository, after applying `paths-ignore`).
+          Which PHP files to lint. One of 'auto' (default: 'changed' when
+          both `pr-base-sha` and `pr-head-sha` are provided, 'all'
+          otherwise), 'changed' (only files changed relative to
+          `pr-base-sha`/`pr-head-sha`), or 'all' (every PHP file in the
+          repository, after applying `paths-ignore`).
         type: string
         default: 'auto'
+      pr-base-sha:
+        description: >
+          Base commit SHA for PR diffing. Pass
+          `${{ github.event.pull_request.base.sha }}` from the caller.
+          Required when `scope=changed`.
+        type: string
+        default: ''
+      pr-head-sha:
+        description: >
+          Head commit SHA for PR diffing. Pass
+          `${{ github.event.pull_request.head.sha }}` from the caller.
+          Required when `scope=changed`.
+        type: string
+        default: ''
       paths-ignore:
         description: >
           Space-separated list of path prefixes to exclude when linting.
           Applied to both 'changed' and 'all' scopes.
         type: string
         default: 'vendor node_modules'
+      timeout-minutes:
+        description: Timeout in minutes for the lint job.
+        type: number
+        default: 10
 
 # Disable permissions for all available scopes by default.
 # Any needed permissions should be configured individually for each job.
@@ -42,15 +61,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-          # For pull_request events we need the full history so that we can
-          # diff against the base ref to find changed PHP files.
-          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
+          # Full history is required only when we diff against PR SHAs.
+          fetch-depth: ${{ inputs.pr-base-sha != '' && inputs.pr-head-sha != '' && 0 || 1 }}
           show-progress: ${{ runner.debug == '1' && 'true' || 'false' }}
 
       - name: Setup PHP
@@ -70,17 +88,16 @@ jobs:
         env:
           SCOPE_INPUT: ${{ inputs.scope }}
           PATHS_IGNORE: ${{ inputs.paths-ignore }}
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ inputs.pr-base-sha }}
+          HEAD_SHA: ${{ inputs.pr-head-sha }}
         shell: bash
         run: |
           set -euo pipefail
 
-          # Resolve 'auto' to 'changed' for pull_request events, otherwise 'all'.
+          # Resolve 'auto' to 'changed' when PR SHAs are provided, otherwise 'all'.
           scope="$SCOPE_INPUT"
           if [[ "$scope" == "auto" ]]; then
-            if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            if [[ -n "${BASE_SHA:-}" && -n "${HEAD_SHA:-}" ]]; then
               scope="changed"
             else
               scope="all"
@@ -170,7 +187,12 @@ jobs:
             [[ -z "$file" ]] && continue
             if ! output=$(php -l "$file" 2>&1); then
               failed=$((failed + 1))
-              echo "::error file=${file}::PHP syntax error detected"
+              line_number="$(awk 'match($0, / on line ([0-9]+)/, m) { print m[1]; exit }' <<< "$output")"
+              if [[ -n "$line_number" ]]; then
+                echo "::error file=${file},line=${line_number}::PHP syntax error detected"
+              else
+                echo "::error file=${file}::PHP syntax error detected"
+              fi
               echo "----- $file -----" >> "$fail_log"
               echo "$output" >> "$fail_log"
               echo "$output"
