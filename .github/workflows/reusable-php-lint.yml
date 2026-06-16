@@ -69,7 +69,7 @@ jobs:
         with:
           persist-credentials: false
           # Full history is required only when we diff against PR SHAs.
-          fetch-depth: ${{ inputs.pr-base-sha != '' && inputs.pr-head-sha != '' && 0 || 1 }}
+          fetch-depth: ${{ (inputs.pr-base-sha != '' && inputs.pr-head-sha != '') && '0' || '1' }}
           show-progress: ${{ runner.debug }}
 
       - name: Setup PHP
