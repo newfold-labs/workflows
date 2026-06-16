@@ -91,6 +91,7 @@ jobs:
           PATHS_IGNORE: ${{ inputs.paths-ignore }}
           BASE_SHA: ${{ inputs.pr-base-sha }}
           HEAD_SHA: ${{ inputs.pr-head-sha }}
+          DEBUG: ${{ runner.debug }}
         shell: bash
         run: |
           set -euo pipefail
@@ -126,7 +127,7 @@ jobs:
               scope="all"
             else
               echo "Determining changed PHP files between merge-base $merge_base and $HEAD_SHA..."
-              if ! mapfile -t CANDIDATES < <(git diff --name-only --diff-filter=ACMRT "$merge_base...$HEAD_SHA" -- '*.php' ':(glob)**/*.php'); then
+              if ! mapfile -t CANDIDATES < <(git diff --name-only --diff-filter=ACMRT "$merge_base...$HEAD_SHA" -- ':(icase,glob)**/*.php'); then
                 echo "::notice::Unable to determine changed PHP files from git diff; falling back to scope=all."
                 scope="all"
                 CANDIDATES=()
@@ -140,11 +141,12 @@ jobs:
             for dir in $PATHS_IGNORE; do
               prune_args+=( -path "./$dir" -o -path "./$dir/*" -o -path "*/$dir" -o -path "*/$dir/*" -o )
             done
-            mapfile -t CANDIDATES < <(find . \( "${prune_args[@]}" -false \) -prune -o -type f -name '*.php' -print | sed 's|^\./||')
+            mapfile -t CANDIDATES < <(find . \( "${prune_args[@]}" -false \) -prune -o -type f -iname '*.php' -print | sed 's|^\./||')
           fi
 
           files_file="$RUNNER_TEMP/php-files.txt"
-          : > "$files_file"
+          candidates_file="$RUNNER_TEMP/php-candidates.txt"
+          : > "$candidates_file"
 
           for file in "${CANDIDATES[@]:-}"; do
             [[ -z "$file" ]] && continue
@@ -156,8 +158,10 @@ jobs:
             done
             [[ $skip -eq 1 ]] && continue
             [[ ! -f "$file" ]] && continue
-            printf '%s\n' "$file" >> "$files_file"
+            printf '%s\n' "$file" >> "$candidates_file"
           done
+
+          sort -u "$candidates_file" > "$files_file"
 
           count=$(wc -l < "$files_file" | tr -d ' ')
           {
@@ -167,11 +171,28 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           echo "Found $count PHP file(s) to lint (scope: $scope)."
-          if [[ $count -gt 0 ]]; then
+          if [[ $count -gt 0 && "${DEBUG:-}" == "1" ]]; then
             echo "---"
             cat "$files_file"
             echo "---"
           fi
+
+          {
+            echo "## PHP Syntax Check"
+            echo ""
+            echo "- **Scope:** \`$scope\`"
+            echo "- **Files to lint:** $count"
+            if [[ $count -gt 0 ]]; then
+              echo ""
+              echo "<details><summary>File list</summary>"
+              echo ""
+              echo '```'
+              cat "$files_file"
+              echo '```'
+              echo ""
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run php -l on selected files
         if: ${{ steps.files.outputs.count != '0' }}
@@ -184,15 +205,34 @@ jobs:
           fail_log="$RUNNER_TEMP/php-lint-failures.log"
           : > "$fail_log"
 
+          escape_workflow_value() {
+            local value="$1"
+            value="${value//'%'/%25}"
+            value="${value//$'\r'/%0D}"
+            value="${value//$'\n'/%0A}"
+            printf '%s' "$value"
+          }
+
+          escape_workflow_property() {
+            local value
+            value="$(escape_workflow_value "$1")"
+            value="${value//':'/%3A}"
+            value="${value//','/%2C}"
+            printf '%s' "$value"
+          }
+
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             if ! output=$(php -l "$file" 2>&1); then
               failed=$((failed + 1))
               line_number="$(awk 'match($0, / on line ([0-9]+)/, m) { print m[1]; exit }' <<< "$output")"
+              summary="$(head -n1 <<< "$output" | tr -d '\r')"
+              escaped_file="$(escape_workflow_property "$file")"
+              escaped_summary="$(escape_workflow_value "$summary")"
               if [[ -n "$line_number" ]]; then
-                echo "::error file=${file},line=${line_number}::PHP syntax error detected"
+                echo "::error file=${escaped_file},line=${line_number}::${escaped_summary}"
               else
-                echo "::error file=${file}::PHP syntax error detected"
+                echo "::error file=${escaped_file}::${escaped_summary}"
               fi
               echo "----- $file -----" >> "$fail_log"
               echo "$output" >> "$fail_log"
@@ -206,10 +246,24 @@ jobs:
             echo ""
             echo "Summary of failures:"
             cat "$fail_log"
+            {
+              echo ""
+              echo "## PHP Syntax Check — failures"
+              echo ""
+              echo "Lint failed for **$failed** file(s)."
+              echo ""
+              echo '```'
+              cat "$fail_log"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 
           echo "All PHP files passed 'php -l' syntax check."
+          {
+            echo ""
+            echo "All PHP files passed \`php -l\` syntax check."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: No PHP files to lint
         if: ${{ steps.files.outputs.count == '0' }}
