@@ -42,7 +42,8 @@ on:
         default: ''
       paths-ignore:
         description: >
-          Space-separated list of path prefixes to exclude when linting.
+          Space-separated list of path prefixes or directory names to exclude
+          when linting. Directory names are matched recursively at any depth.
           Applied to both 'changed' and 'all' scopes.
         type: string
         default: 'vendor node_modules'
@@ -69,10 +70,10 @@ jobs:
           persist-credentials: false
           # Full history is required only when we diff against PR SHAs.
           fetch-depth: ${{ inputs.pr-base-sha != '' && inputs.pr-head-sha != '' && 0 || 1 }}
-          show-progress: ${{ runner.debug == '1' && 'true' || 'false' }}
+          show-progress: ${{ runner.debug }}
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ inputs.php-version }}
           coverage: none
@@ -137,9 +138,9 @@ jobs:
             echo "Listing all PHP files in the repository..."
             prune_args=()
             for dir in $PATHS_IGNORE; do
-              prune_args+=( -path "./$dir" -prune -o )
+              prune_args+=( -path "./$dir" -o -path "./$dir/*" -o -path "*/$dir" -o -path "*/$dir/*" -o )
             done
-            mapfile -t CANDIDATES < <(find . "${prune_args[@]}" -type f -name '*.php' -print | sed 's|^\./||')
+            mapfile -t CANDIDATES < <(find . \( "${prune_args[@]}" -false \) -prune -o -type f -name '*.php' -print | sed 's|^\./||')
           fi
 
           files_file="$RUNNER_TEMP/php-files.txt"
@@ -150,7 +151,7 @@ jobs:
             skip=0
             for dir in $PATHS_IGNORE; do
               case "$file" in
-                "$dir"/*) skip=1; break ;;
+                "$dir"|"$dir"/*|*/"$dir"|*/"$dir"/*) skip=1; break ;;
               esac
             done
             [[ $skip -eq 1 ]] && continue
