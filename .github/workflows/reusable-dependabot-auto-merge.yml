@@ -25,6 +25,13 @@ on:
 # Any needed permissions are configured individually on the job.
 permissions: {}
 
+# Keep a manual workflow_dispatch from overlapping a scheduled sweep on the same
+# repo. Queue rather than cancel so an in-flight merge is never interrupted.
+# github.repository is the caller's repo, so each consumer gets its own group.
+concurrency:
+  group: dependabot-auto-merge-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   # Periodic batch sweep (caller fires this on a cron schedule, not per-PR).
   #
@@ -40,9 +47,12 @@ jobs:
   # they are skipped this pass rather than merged into a conflict.
   dependabot-auto-merge:
     runs-on: ubuntu-latest
+    # checks: read is required for the Checks API call that gates on check-run
+    # status; without it the call 403s and nothing is ever merged.
     permissions:
       contents: write
       pull-requests: write
+      checks: read
     timeout-minutes: 10
     steps:
       - name: Validate inputs

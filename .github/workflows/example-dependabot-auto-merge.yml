@@ -42,12 +42,17 @@ permissions: {}
 jobs:
   auto-merge:
     name: Auto-merge Dependabot PRs
-    uses: newfold-labs/workflows/.github/workflows/reusable-dependabot-auto-merge.yml@main
+    # Example intentionally tracks @main; pin to a commit SHA when you copy this
+    # into your repo (see header note). zizmor ignore must sit on the uses line.
+    uses: newfold-labs/workflows/.github/workflows/reusable-dependabot-auto-merge.yml@main # zizmor: ignore[unpinned-uses]
     with:
       merge-method: squash
       update-types: patch,minor        # majors are left for a human to review
       dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run || false }}
+    # The reusable reads check-run status via the Checks API, so it needs
+    # checks: read. GITHUB_TOKEN is available to the called workflow automatically,
+    # so no secrets: inherit is required.
     permissions:
       contents: write
       pull-requests: write
-    secrets: inherit
+      checks: read
