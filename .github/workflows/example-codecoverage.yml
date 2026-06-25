@@ -1,0 +1,37 @@
+##
+# Example workflow for consumer repos that want to run the reusable code coverage workflow.
+#
+# Copy this file into your repo at .github/workflows/ (e.g. codecoverage.yml).
+# Update repository-name to match your repo (used for GitHub Pages coverage URLs).
+#
+# Prerequisites:
+#   - PHP/Composer project with PHPUnit (and optionally Codeception wpunit) tests.
+#   - No need to pass repo_token unless you use a different token for gh-pages; GITHUB_TOKEN is used by default.
+#
+# To clean up stale gh-pages coverage dirs, add example-codecoverage-cleanup.yml as well.
+#
+# This workflow is skipped in the newfold-labs/workflows repo (no PHP/tests here); it runs when copied to other repos.
+##
+name: Code Coverage (example)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  codecoverage:
+    if: github.repository != 'newfold-labs/workflows'
+    uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage.yml@f0b26152e4ea40cd40429e06b1f30aa8879e7392
+    with:
+      php-versions: '["7.4", "8.0", "8.1", "8.2", "8.3", "8.4"]'
+      coverage-php-version: '7.4'
+      repository-name: 'your-repo-name'
+      minimum-coverage: 25
+      mysql-version: '5.7'
+    secrets: inherit
