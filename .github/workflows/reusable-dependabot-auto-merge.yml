@@ -2,139 +2,210 @@ name: Reusable - Dependabot Auto-Merge
 on:
   workflow_call:
     inputs:
-      pr-number:
-        description: Number of the Dependabot PR to merge.
-        type: string
-        required: true
-      head-sha:
-        description: Head commit SHA of the PR; used to gate on check-run results.
-        type: string
-        required: true
       merge-method:
-        description: How to merge the PR. One of merge | squash | rebase.
+        description: How to merge each PR. One of merge | squash | rebase.
         type: string
-        default: merge
+        default: squash
+      update-types:
+        description: >-
+          Comma-separated semver bump types that may auto-merge
+          (any of: patch, minor, major). Default leaves majors for a human.
+        type: string
+        default: patch,minor
+      pr-limit:
+        description: Maximum number of open Dependabot PRs to evaluate per sweep.
+        type: string
+        default: "50"
+      dry-run:
+        description: When true, log what would be merged without approving or merging.
+        type: boolean
+        default: false
 
 # Disable permissions for all available scopes by default.
-# Any needed permissions should be configured individually for each job.
+# Any needed permissions are configured individually on the job.
 permissions: {}
 
 jobs:
-  # Approves the Dependabot PR and merges it once every other check run on the head
-  # SHA has finished successfully. Caller is wired to `workflow_run` on the repo's
-  # CI workflows, so this job fires once per CI workflow completion. Earlier firings
-  # see in-progress checks and defer; the last firing sees everything green and
-  # performs the merge. There is no native `--auto` arming here: the gate is this
-  # job's own check-run aggregation, not branch protection.
+  # Periodic batch sweep (caller fires this on a cron schedule, not per-PR).
   #
-  # Job ID is intentionally specific so the gate step can identify and exclude
-  # check runs produced by ANY invocation of this reusable workflow on the same SHA
-  # (not just the currently-executing run). Otherwise a previously-failed auto-merge
-  # check run would block all future firings.
+  # Each run discovers every open Dependabot PR on the caller's repo and merges
+  # the ones that are eligible: open, not draft, mergeable (no conflicts), all
+  # check runs green, and a bump type the caller opted into. PRs that are not yet
+  # eligible (CI still running, a conflict awaiting Dependabot rebase, a major
+  # bump) are simply left for a human or for the next sweep — there is no per-PR
+  # event wiring and no SHA passed in by the caller.
+  #
+  # Mergeability is re-read per PR immediately before merging, so when several
+  # PRs touch the same lockfile, merging the first turns the rest "dirty" and
+  # they are skipped this pass rather than merged into a conflict.
   dependabot-auto-merge:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Validate merge-method input
+      - name: Validate inputs
         env:
           MERGE_METHOD: ${{ inputs.merge-method }}
+          UPDATE_TYPES: ${{ inputs.update-types }}
+          PR_LIMIT: ${{ inputs.pr-limit }}
         run: |
           case "$MERGE_METHOD" in
             merge|squash|rebase) ;;
             *) echo "::error::invalid merge-method '$MERGE_METHOD' (expected merge|squash|rebase)"; exit 1 ;;
           esac
+          IFS=',' read -ra _types <<<"$UPDATE_TYPES"
+          for t in "${_types[@]}"; do
+            case "${t// /}" in
+              patch|minor|major) ;;
+              "") ;;
+              *) echo "::error::invalid update-types entry '$t' (expected patch|minor|major)"; exit 1 ;;
+            esac
+          done
+          if ! [[ "$PR_LIMIT" =~ ^[0-9]+$ ]]; then
+            echo "::error::pr-limit must be a positive integer, got '$PR_LIMIT'"; exit 1
+          fi
 
-      - name: Verify PR is open and authored by Dependabot
-        id: pr
+      - name: Sweep and merge eligible Dependabot PRs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ inputs.pr-number }}
-        run: |
-          read -r state author <<<"$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '"\(.state) \(.user.login)"')"
-          if [[ "$state" != "open" ]]; then
-            echo "::notice::PR #${PR_NUMBER} is ${state}; nothing to do"
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [[ "$author" != "dependabot[bot]" ]]; then
-            echo "::notice::PR #${PR_NUMBER} authored by '${author}', not dependabot[bot]"
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "proceed=true" >> "$GITHUB_OUTPUT"
-
-      # Walk every check run on the head SHA, excluding ones from any auto-merge
-      # invocation. Two layers of exclusion:
-      #   (a) details_url contains the current run-id — catches every check run from
-      #       this run, including any future sibling jobs in the caller.
-      #   (b) name contains "dependabot-auto-merge" — catches check runs from
-      #       earlier (possibly failed) invocations of this reusable workflow on the
-      #       same SHA, so a stale failed run doesn't permanently block the merge.
-      # If any remaining check run is still queued/in_progress, defer — a later
-      # workflow_run firing will retry. If any has a non-pass conclusion, exit
-      # cleanly without merging. Treats success / skipped / neutral as pass.
-      - name: Gate on all check runs for HEAD SHA
-        id: gate
-        if: steps.pr.outputs.proceed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ inputs.head-sha }}
-          SELF_RUN_ID: ${{ github.run_id }}
+          MERGE_METHOD: ${{ inputs.merge-method }}
+          UPDATE_TYPES: ${{ inputs.update-types }}
+          PR_LIMIT: ${{ inputs.pr-limit }}
+          DRY_RUN: ${{ inputs.dry-run }}
         run: |
           set -u
-          self_marker="/actions/runs/${SELF_RUN_ID}/"
-          merge_ok=true
-          processed=0
-          while IFS=$'\t' read -r status conclusion details_url name; do
-            [[ "$details_url" == *"$self_marker"* ]] && continue
-            [[ "$name" == *"dependabot-auto-merge"* ]] && continue
-            processed=$((processed + 1))
-            if [[ "$status" != "completed" ]]; then
-              echo "::notice::check run '${name}' is ${status}; deferring merge"
-              merge_ok=false
-              break
+
+          # Classify the most severe semver bump named in a Dependabot PR's
+          # title/body. Grouped PRs list several bumps; the worst one wins, so a
+          # group containing any major is treated as major. Prints one of:
+          # major | minor | patch | unknown (unknown when no version pair parses,
+          # e.g. SHA-only action pins — left for a human).
+          classify_bump() {
+            PR_TITLE="$1" PR_BODY="$2" python3 - <<'PY'
+          import os, re
+          text = os.environ.get("PR_TITLE", "") + "\n" + os.environ.get("PR_BODY", "")
+          pairs = re.findall(
+              r'from\s+`?v?(\d+(?:\.\d+)*)`?\s+to\s+`?v?(\d+(?:\.\d+)*)`?',
+              text, re.IGNORECASE)
+          def severity(old, new):
+              o = [int(x) for x in old.split('.')]
+              n = [int(x) for x in new.split('.')]
+              width = max(len(o), len(n))
+              o += [0] * (width - len(o))
+              n += [0] * (width - len(n))
+              for i in range(width):
+                  if o[i] != n[i]:
+                      return 0 if i == 0 else (1 if i == 1 else 2)
+              return 2  # identical -> harmless, treat as patch
+          if not pairs:
+              print("unknown")
+          else:
+              print(["major", "minor", "patch"][min(severity(o, n) for o, n in pairs)])
+          PY
+          }
+
+          # Returns 0 only if every check run on the SHA has completed and passed.
+          # success / skipped / neutral count as pass; an empty set is a defer
+          # (a scheduled run creates no check runs on the PR head, so absence here
+          # means CI genuinely has not reported yet).
+          checks_green() {
+            local sha="$1" ok=true seen=0 status conclusion name
+            while IFS=$'\t' read -r status conclusion name; do
+              seen=$((seen + 1))
+              if [[ "$status" != "completed" ]]; then
+                echo "::notice::  check '$name' is $status; not merging yet"
+                ok=false; break
+              fi
+              case "$conclusion" in
+                success|skipped|neutral) ;;
+                *) echo "::notice::  check '$name' conclusion=$conclusion; not merging"; ok=false; break ;;
+              esac
+            done < <(
+              gh api "repos/${REPO}/commits/${sha}/check-runs" --paginate \
+                --jq '.check_runs[] | [.status, (.conclusion // ""), .name] | @tsv'
+            )
+            if [[ "$seen" -eq 0 ]]; then
+              echo "::notice::  no check runs on $sha yet; deferring"
+              ok=false
             fi
-            case "$conclusion" in
-              success|skipped|neutral) ;;
-              *)
-                echo "::notice::check run '${name}' conclusion=${conclusion}; not merging"
-                merge_ok=false
-                break
-                ;;
-            esac
-          done < <(
-            gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs" --paginate \
-              --jq '.check_runs[] | [.status, (.conclusion // ""), .details_url, .name] | @tsv'
+            $ok
+          }
+
+          # Normalise the allow-list to a space-padded string for membership tests
+          # (strip spaces, turn commas into spaces, pad the ends).
+          _clean="${UPDATE_TYPES// /}"
+          allowed=" ${_clean//,/ } "
+
+          mapfile -t prs < <(
+            gh pr list --repo "$REPO" --state open --limit "$PR_LIMIT" \
+              --json number,author --jq '.[] | select(.author.login == "dependabot[bot]") | .number'
           )
-          # Refuse to merge on an empty check-run set — workflow_run fired, so a
-          # CI check run must exist on the SHA. An empty result indicates a
-          # transient API gap; better to defer than merge unvalidated.
-          if [[ "$processed" -eq 0 ]]; then
-            echo "::notice::no non-self check runs found on HEAD SHA; deferring"
-            merge_ok=false
+
+          if [[ "${#prs[@]}" -eq 0 ]]; then
+            echo "::notice::no open Dependabot PRs found"
+            exit 0
           fi
-          echo "merge_ok=${merge_ok}" >> "$GITHUB_OUTPUT"
+          echo "Found ${#prs[@]} open Dependabot PR(s): ${prs[*]}"
 
-      # Re-approves on every firing so repos with "dismiss stale approvals on new
-      # commits" stay approved across Dependabot rebases.
-      - name: Approve PR
-        if: steps.gate.outputs.merge_ok == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ inputs.pr-number }}
-        run: gh pr review --approve --repo "$REPO" "$PR_NUMBER"
+          merged=0
+          for num in "${prs[@]}"; do
+            echo "::group::PR #${num}"
 
-      - name: Merge PR
-        if: steps.gate.outputs.merge_ok == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ inputs.pr-number }}
-          MERGE_METHOD: ${{ inputs.merge-method }}
-        run: gh pr merge --repo "$REPO" "--$MERGE_METHOD" "$PR_NUMBER"
+            # Fresh read: an earlier merge in this same sweep may have made this PR
+            # dirty or stale, so never trust a list snapshot here.
+            data=$(gh pr view "$num" --repo "$REPO" \
+              --json title,body,isDraft,mergeable,headRefOid 2>/dev/null) || {
+              echo "::notice::could not read PR #${num}; skipping"; echo "::endgroup::"; continue
+            }
+            title=$(jq -r '.title' <<<"$data")
+            body=$(jq -r '.body // ""' <<<"$data")
+            is_draft=$(jq -r '.isDraft' <<<"$data")
+            mergeable=$(jq -r '.mergeable' <<<"$data")
+            head_sha=$(jq -r '.headRefOid' <<<"$data")
+            echo "title: ${title}"
+
+            if [[ "$is_draft" == "true" ]]; then
+              echo "::notice::PR #${num} is a draft; skipping"; echo "::endgroup::"; continue
+            fi
+
+            bump=$(classify_bump "$title" "$body")
+            if [[ "$allowed" != *" $bump "* ]]; then
+              echo "::notice::PR #${num} bump type '${bump}' not in update-types (${UPDATE_TYPES}); leaving for review"
+              echo "::endgroup::"; continue
+            fi
+
+            # MERGEABLE = no conflicts. CONFLICTING (dirty) is left for Dependabot
+            # to rebase; UNKNOWN means GitHub is still computing — retry next sweep.
+            if [[ "$mergeable" != "MERGEABLE" ]]; then
+              echo "::notice::PR #${num} mergeable=${mergeable}; skipping this sweep"
+              echo "::endgroup::"; continue
+            fi
+
+            if ! checks_green "$head_sha"; then
+              echo "::endgroup::"; continue
+            fi
+
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "::notice::[dry-run] would approve and ${MERGE_METHOD}-merge PR #${num} (${bump})"
+              echo "::endgroup::"; continue
+            fi
+
+            # Re-approve every sweep so repos that dismiss stale approvals on a
+            # Dependabot rebase stay approved. Best-effort: approval may be a no-op
+            # where it already exists, and must not abort the merge.
+            gh pr review --approve --repo "$REPO" "$num" || \
+              echo "::notice::approval on PR #${num} was a no-op or not permitted; continuing"
+
+            if gh pr merge --repo "$REPO" "--$MERGE_METHOD" "$num"; then
+              echo "::notice::merged PR #${num} (${bump})"
+              merged=$((merged + 1))
+            else
+              echo "::notice::merge of PR #${num} failed (likely branch protection or a race); leaving for next sweep"
+            fi
+            echo "::endgroup::"
+          done
+
+          echo "Sweep complete: merged ${merged} PR(s)."
