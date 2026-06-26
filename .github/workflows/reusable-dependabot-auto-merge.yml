@@ -169,15 +169,25 @@ jobs:
             echo "::group::PR #${num}"
 
             # Fresh read: an earlier merge in this same sweep may have made this PR
-            # dirty or stale, so never trust a list snapshot here.
-            data=$(gh pr view "$num" --repo "$REPO" \
-              --json title,body,isDraft,mergeable,headRefOid 2>/dev/null) || {
-              echo "::notice::could not read PR #${num}; skipping"; echo "::endgroup::"; continue
-            }
+            # dirty or stale, so never trust a list snapshot here. GitHub computes
+            # mergeability asynchronously and returns UNKNOWN until it settles;
+            # re-reading triggers that computation, so retry a few times before
+            # giving up and deferring to the next sweep.
+            data=""; mergeable="UNKNOWN"
+            for attempt in 1 2 3 4 5; do
+              data=$(gh pr view "$num" --repo "$REPO" \
+                --json title,body,isDraft,mergeable,headRefOid 2>/dev/null) || {
+                echo "::notice::could not read PR #${num}; skipping"; data=""; break
+              }
+              mergeable=$(jq -r '.mergeable' <<<"$data")
+              [[ "$mergeable" != "UNKNOWN" ]] && break
+              echo "::notice::  PR #${num} mergeable still UNKNOWN (attempt ${attempt}); waiting for GitHub"
+              sleep 3
+            done
+            if [[ -z "$data" ]]; then echo "::endgroup::"; continue; fi
             title=$(jq -r '.title' <<<"$data")
             body=$(jq -r '.body // ""' <<<"$data")
             is_draft=$(jq -r '.isDraft' <<<"$data")
-            mergeable=$(jq -r '.mergeable' <<<"$data")
             head_sha=$(jq -r '.headRefOid' <<<"$data")
             echo "title: ${title}"
 
@@ -192,7 +202,8 @@ jobs:
             fi
 
             # MERGEABLE = no conflicts. CONFLICTING (dirty) is left for Dependabot
-            # to rebase; UNKNOWN means GitHub is still computing — retry next sweep.
+            # to rebase; UNKNOWN here means GitHub never settled even after the
+            # retries above — defer to the next sweep.
             if [[ "$mergeable" != "MERGEABLE" ]]; then
               echo "::notice::PR #${num} mergeable=${mergeable}; skipping this sweep"
               echo "::endgroup::"; continue
