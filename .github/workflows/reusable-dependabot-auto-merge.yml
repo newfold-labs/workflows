@@ -149,9 +149,13 @@ jobs:
           _clean="${UPDATE_TYPES// /}"
           allowed=" ${_clean//,/ } "
 
+          # gh's GraphQL author field reports Dependabot's login as "app/dependabot"
+          # (is_bot=true), not "dependabot[bot]" as the REST API / @mentions do.
+          # Match on is_bot + a dependabot login suffix so both forms are covered.
           mapfile -t prs < <(
             gh pr list --repo "$REPO" --state open --limit "$PR_LIMIT" \
-              --json number,author --jq '.[] | select(.author.login == "dependabot[bot]") | .number'
+              --json number,author \
+              --jq '.[] | select(.author.is_bot and (.author.login | endswith("dependabot"))) | .number'
           )
 
           if [[ "${#prs[@]}" -eq 0 ]]; then
