@@ -23,6 +23,10 @@
 #   i18n-script-location (optional, default: 'composer')
 #     Where i18n scripts are run from. Use "npm" if the repo runs i18n via package.json (e.g. @wordpress/scripts).
 #
+#   php-version (optional, default: '8.0')
+#     PHP version used to run Composer and the i18n scripts. Repos whose composer install runs install-time tooling
+#     (e.g. PHP-Scoper) may need a newer version than the default.
+#
 #   po-wrapwidth (optional, default: 77)
 #     Line wrap width when the Python script saves PO files (gettext-style). Only used when the translate script actually writes a file; ignored when po-nowrap is true. Use to match your gettext/xgettext wrap width and reduce formatting-only diffs.
 #
@@ -52,6 +56,11 @@ on:
         required: false
         type: string
         default: 'composer'
+      php-version:
+        description: 'PHP version used to run Composer and the i18n scripts. Repos whose composer install runs install-time tooling (e.g. PHP-Scoper) may need a newer version than the default.'
+        required: false
+        type: string
+        default: '8.0'
       po-wrapwidth:
         description: 'Line wrap width when saving PO files (default 77, match gettext). Ignored when po-nowrap is true.'
         required: false
@@ -185,7 +194,7 @@ jobs:
         id: setup_php
         uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
         with:
-          php-version: "8.0"
+          php-version: "${{ inputs.php-version }}"
 
       # Installs Composer deps so i18n-ci-pre (and i18n-ci-post in a later job) can run.
       - name: Install Composer dependencies
@@ -415,7 +424,7 @@ jobs:
         id: setup_php
         uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
         with:
-          php-version: "8.0"
+          php-version: "${{ inputs.php-version }}"
 
       # Installs Composer deps so i18n-ci-post can run.
       - name: Install Composer dependencies

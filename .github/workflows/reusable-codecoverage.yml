@@ -49,6 +49,10 @@ on:
         description: MySQL version for the service container
         type: string
         default: '5.7'
+      install-php-version:
+        description: Optional PHP version used only for the composer install step (defaults to the matrix PHP version under test). Useful when install-time tooling (e.g. PHP-Scoper) requires a newer PHP than the oldest test runtime; the lock file and platform config keep the installed dependencies identical.
+        type: string
+        default: ''
     secrets:
       repo_token:
         description: GitHub token for committing to gh-pages
@@ -169,8 +173,29 @@ jobs:
         with:
           env-file: .env.testing
 
+      # Optionally run composer install on a newer PHP than the matrix version
+      # under test, for repos whose install-time tooling needs it. The matrix
+      # PHP is restored right after, so tests still run on the version under test.
+      - name: Switch PHP for composer install
+        if: ${{ inputs.install-php-version != '' && inputs.install-php-version != matrix.php }}
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
+        with:
+          php-version: ${{ inputs.install-php-version }}
+          coverage: none
+          tools: composer
+          extensions: zip
+
       - name: Run composer install
         run: composer install -v
+
+      - name: Restore matrix PHP version
+        if: ${{ inputs.install-php-version != '' && inputs.install-php-version != matrix.php }}
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: xdebug
+          tools: composer, jaschilz/php-coverage-badger
+          extensions: zip
 
       - name: Check if wp-content directory exists
         id: check_wp_content
