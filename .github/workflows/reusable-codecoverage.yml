@@ -9,6 +9,7 @@
 #     coverage-php-version: '7.4'
 #     repository-name: 'wp-module-activation'
 #     minimum-coverage: 25
+#     install-php-version: '8.3'   # optional; PHP used only for composer install (see input description)
 #
 # Associated cleanup workflow (removes stale gh-pages/<sha>/ dirs, optional squash):
 #   uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage-cleanup.yml@main
