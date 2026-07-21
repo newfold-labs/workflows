@@ -34,4 +34,5 @@ jobs:
       repository-name: 'your-repo-name'
       minimum-coverage: 25
       mysql-version: '5.7'
+      # install-php-version: '8.3'  # optional; PHP used only for composer install, e.g. when install-time tooling needs a newer PHP than the oldest matrix version
     secrets: inherit
