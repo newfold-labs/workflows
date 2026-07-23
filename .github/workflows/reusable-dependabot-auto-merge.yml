@@ -73,7 +73,7 @@ jobs:
               *) echo "::error::invalid update-types entry '$t' (expected patch|minor|major)"; exit 1 ;;
             esac
           done
-          if ! [[ "$PR_LIMIT" =~ ^[0-9]+$ ]]; then
+          if ! [[ "$PR_LIMIT" =~ ^[1-9][0-9]*$ ]]; then
             echo "::error::pr-limit must be a positive integer, got '$PR_LIMIT'"; exit 1
           fi
 
