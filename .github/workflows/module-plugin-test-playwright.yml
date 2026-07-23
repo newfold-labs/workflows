@@ -5,7 +5,7 @@ on:
       php-version:
         description: The version of php to be used
         type: string
-        default: '8.1'
+        default: '8.2'
       node-version:
         description: The version of Node.js to be used
         type: string
