@@ -2,7 +2,7 @@
 # Example workflow for consumer repos: scheduled batch auto-merge of Dependabot PRs.
 #
 # Copy to .github/workflows/ (e.g. dependabot-auto-merge.yml), then:
-#   - Pin `uses: ...@<full-40-char-commit-sha>` (supply chain / zizmor); bump when workflows changes.
+#   - Keep `uses: ...@main` — the standard ref for newfold-labs/workflows reusables.
 #   - Tune the cron and inputs below to taste.
 #
 # How it works: instead of reacting to every Dependabot PR as it opens, this runs
@@ -42,8 +42,9 @@ permissions: {}
 jobs:
   auto-merge:
     name: Auto-merge Dependabot PRs
-    # Example intentionally tracks @main; pin to a commit SHA when you copy this
-    # into your repo (see header note). zizmor ignore must sit on the uses line.
+    # Tracks @main, matching every other newfold-labs/workflows reusable. The
+    # zizmor ignore is only needed here because this example lives in the workflows
+    # repo, which scans its own files; consumers referencing @main don't need it.
     uses: newfold-labs/workflows/.github/workflows/reusable-dependabot-auto-merge.yml@main # zizmor: ignore[unpinned-uses]
     with:
       merge-method: squash

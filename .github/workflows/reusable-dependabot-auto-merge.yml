@@ -117,31 +117,45 @@ jobs:
           PY
           }
 
-          # Returns 0 only if every check run on the SHA has completed and passed.
-          # success / skipped / neutral count as pass; an empty set is a defer
-          # (a scheduled run creates no check runs on the PR head, so absence here
-          # means CI genuinely has not reported yet).
-          checks_green() {
-            local sha="$1" ok=true seen=0 status conclusion name
-            while IFS=$'\t' read -r status conclusion name; do
-              seen=$((seen + 1))
-              if [[ "$status" != "completed" ]]; then
-                echo "::notice::  check '$name' is $status; not merging yet"
-                ok=false; break
-              fi
-              case "$conclusion" in
-                success|skipped|neutral) ;;
-                *) echo "::notice::  check '$name' conclusion=$conclusion; not merging"; ok=false; break ;;
-              esac
-            done < <(
-              gh api "repos/${REPO}/commits/${sha}/check-runs" --paginate \
-                --jq '.check_runs[] | [.status, (.conclusion // ""), .name] | @tsv'
-            )
-            if [[ "$seen" -eq 0 ]]; then
-              echo "::notice::  no check runs on $sha yet; deferring"
-              ok=false
-            fi
-            $ok
+          # Verdict on a PR's checks, read from the statusCheckRollup already
+          # fetched with the PR (no extra API call). Each check is collapsed to its
+          # latest run by name, so a stale cancelled/failed run left beside a newer
+          # success — common with concurrency: cancel-in-progress — does not wedge a
+          # green PR forever. Legacy commit statuses (StatusContext) are covered too,
+          # not just Actions check runs. Prints one of:
+          #   green        -> every latest check completed and passed (success/skipped/neutral)
+          #   none         -> no checks reported yet (defer; CI may not have started)
+          #   pending:<n>  -> at least one latest check has not completed
+          #   failing:<n>  -> all completed but at least one did not pass
+          CHECKS_JQ='
+            [ .statusCheckRollup[]?
+              | if .__typename == "StatusContext"
+                then { name: .context,
+                       ts: (.createdAt // ""),
+                       completed: (.state != "PENDING" and .state != "EXPECTED"),
+                       pass: (.state == "SUCCESS") }
+                else { name: .name,
+                       ts: (.completedAt // .startedAt // ""),
+                       completed: (.status == "COMPLETED"),
+                       pass: ((.conclusion // "") | IN("SUCCESS","SKIPPED","NEUTRAL")) }
+                end ]
+            | group_by(.name) | map(max_by(.ts))
+            | if length == 0 then "none"
+              elif map(select(.completed | not)) | length > 0
+                then "pending:" + (map(select(.completed | not))[0].name)
+              elif map(select(.pass | not)) | length > 0
+                then "failing:" + (map(select(.pass | not))[0].name)
+              else "green" end
+          '
+          checks_verdict() { jq -r "$CHECKS_JQ" <<<"$1"; }
+
+          # Rows accumulated for the run summary ($GITHUB_STEP_SUMMARY) written at
+          # the end, so an operator can see at a glance what merged and — more
+          # importantly — why each remaining PR was left behind.
+          declare -a SUMMARY_ROWS=()
+          summary_row() {  # $1=number  $2=title  $3=result. Escape pipes for the table.
+            local t="${2//|/\\|}"
+            SUMMARY_ROWS+=("| #$1 | ${t} | $3 |")
           }
 
           # Normalise the allow-list to a space-padded string for membership tests
@@ -160,6 +174,11 @@ jobs:
 
           if [[ "${#prs[@]}" -eq 0 ]]; then
             echo "::notice::no open Dependabot PRs found"
+            {
+              echo "### Dependabot auto-merge"
+              echo ""
+              echo "No open Dependabot PRs found."
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
             exit 0
           fi
           echo "Found ${#prs[@]} open Dependabot PR(s): ${prs[*]}"
@@ -176,7 +195,7 @@ jobs:
             data=""; mergeable="UNKNOWN"
             for attempt in 1 2 3 4 5; do
               data=$(gh pr view "$num" --repo "$REPO" \
-                --json title,body,isDraft,mergeable,headRefOid 2>/dev/null) || {
+                --json title,body,isDraft,mergeable,statusCheckRollup 2>/dev/null) || {
                 echo "::notice::could not read PR #${num}; skipping"; data=""; break
               }
               mergeable=$(jq -r '.mergeable' <<<"$data")
@@ -184,21 +203,24 @@ jobs:
               echo "::notice::  PR #${num} mergeable still UNKNOWN (attempt ${attempt}); waiting for GitHub"
               sleep 3
             done
-            if [[ -z "$data" ]]; then echo "::endgroup::"; continue; fi
+            if [[ -z "$data" ]]; then
+              summary_row "$num" "(could not read PR)" "skipped — unreadable"
+              echo "::endgroup::"; continue
+            fi
             title=$(jq -r '.title' <<<"$data")
             body=$(jq -r '.body // ""' <<<"$data")
             is_draft=$(jq -r '.isDraft' <<<"$data")
-            head_sha=$(jq -r '.headRefOid' <<<"$data")
             echo "title: ${title}"
 
             if [[ "$is_draft" == "true" ]]; then
-              echo "::notice::PR #${num} is a draft; skipping"; echo "::endgroup::"; continue
+              echo "::notice::PR #${num} is a draft; skipping"
+              summary_row "$num" "$title" "skipped — draft"; echo "::endgroup::"; continue
             fi
 
             bump=$(classify_bump "$title" "$body")
             if [[ "$allowed" != *" $bump "* ]]; then
               echo "::notice::PR #${num} bump type '${bump}' not in update-types (${UPDATE_TYPES}); leaving for review"
-              echo "::endgroup::"; continue
+              summary_row "$num" "$title" "left for review — ${bump} bump"; echo "::endgroup::"; continue
             fi
 
             # MERGEABLE = no conflicts. CONFLICTING (dirty) is left for Dependabot
@@ -206,16 +228,26 @@ jobs:
             # retries above — defer to the next sweep.
             if [[ "$mergeable" != "MERGEABLE" ]]; then
               echo "::notice::PR #${num} mergeable=${mergeable}; skipping this sweep"
-              echo "::endgroup::"; continue
+              summary_row "$num" "$title" "deferred — mergeable=${mergeable}"; echo "::endgroup::"; continue
             fi
 
-            if ! checks_green "$head_sha"; then
-              echo "::endgroup::"; continue
-            fi
+            verdict=$(checks_verdict "$data")
+            case "$verdict" in
+              green) ;;
+              none)
+                echo "::notice::PR #${num} has no checks reported yet; deferring"
+                summary_row "$num" "$title" "deferred — no checks yet"; echo "::endgroup::"; continue ;;
+              pending:*)
+                echo "::notice::PR #${num} check '${verdict#pending:}' not complete; deferring"
+                summary_row "$num" "$title" "deferred — CI pending"; echo "::endgroup::"; continue ;;
+              failing:*)
+                echo "::notice::PR #${num} check '${verdict#failing:}' not passing; skipping"
+                summary_row "$num" "$title" "skipped — failing: ${verdict#failing:}"; echo "::endgroup::"; continue ;;
+            esac
 
             if [[ "$DRY_RUN" == "true" ]]; then
               echo "::notice::[dry-run] would approve and ${MERGE_METHOD}-merge PR #${num} (${bump})"
-              echo "::endgroup::"; continue
+              summary_row "$num" "$title" "would merge (${bump}) — dry run"; echo "::endgroup::"; continue
             fi
 
             # Re-approve every sweep so repos that dismiss stale approvals on a
@@ -226,11 +258,24 @@ jobs:
 
             if gh pr merge --repo "$REPO" "--$MERGE_METHOD" "$num"; then
               echo "::notice::merged PR #${num} (${bump})"
+              summary_row "$num" "$title" "merged (${bump})"
               merged=$((merged + 1))
             else
               echo "::notice::merge of PR #${num} failed (likely branch protection or a race); leaving for next sweep"
+              summary_row "$num" "$title" "merge failed — see log"
             fi
             echo "::endgroup::"
           done
 
           echo "Sweep complete: merged ${merged} PR(s)."
+
+          {
+            echo "### Dependabot auto-merge"
+            echo ""
+            [[ "$DRY_RUN" == "true" ]] && { echo "_Dry run — nothing was actually merged._"; echo ""; }
+            echo "Evaluated **${#prs[@]}** open Dependabot PR(s); merged **${merged}**."
+            echo ""
+            echo "| PR | Title | Result |"
+            echo "| -- | ----- | ------ |"
+            printf '%s\n' "${SUMMARY_ROWS[@]}"
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
