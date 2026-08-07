@@ -1,0 +1,59 @@
+##
+# Example workflow for consumer repos: scheduled batch auto-merge of Dependabot PRs.
+#
+# Copy to .github/workflows/ (e.g. dependabot-auto-merge.yml), then:
+#   - Keep `uses: ...@main` — the standard ref for newfold-labs/workflows reusables.
+#   - Tune the cron and inputs below to taste.
+#
+# How it works: instead of reacting to every Dependabot PR as it opens, this runs
+# on a schedule and sweeps all open Dependabot PRs at once, merging the eligible
+# ones (not draft, no conflicts, all checks green, an opted-in bump type). This
+# keeps CI cost flat and avoids the merge-conflict cascade you get when several
+# Dependabot PRs each merge independently and invalidate each other's lockfile.
+#
+# Pairs well with grouped updates in .github/dependabot.yml — one PR per ecosystem
+# means one CI run and nothing for siblings to conflict on.
+#
+# Strongly recommended: also enable Dependabot grouping, e.g.
+#   updates:
+#     - package-ecosystem: composer
+#       directory: "/"
+#       schedule: { interval: weekly }
+#       groups:
+#         composer-all: { patterns: ["*"] }
+##
+name: Dependabot Auto-Merge (example)
+
+on:
+  schedule:
+    # Twice a day (06:00 and 18:00 UTC). The sweep is cheap; the extra run just
+    # lowers the latency before a freshly-green or freshly-rebased PR is merged.
+    - cron: "0 6,18 * * *"
+  workflow_dispatch:
+    # Manual trigger for testing. Flip dry-run on first to see what it would do.
+    inputs:
+      dry-run:
+        description: Log what would be merged without merging.
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  auto-merge:
+    name: Auto-merge Dependabot PRs
+    # Tracks @main, matching every other newfold-labs/workflows reusable. The
+    # zizmor ignore is only needed here because this example lives in the workflows
+    # repo, which scans its own files; consumers referencing @main don't need it.
+    uses: newfold-labs/workflows/.github/workflows/reusable-dependabot-auto-merge.yml@main # zizmor: ignore[unpinned-uses]
+    with:
+      merge-method: squash
+      update-types: patch,minor        # majors are left for a human to review
+      dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run || false }}
+    # The reusable reads check-run status via the Checks API, so it needs
+    # checks: read. GITHUB_TOKEN is available to the called workflow automatically,
+    # so no secrets: inherit is required.
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
