@@ -65,14 +65,18 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
-          # Full history is required only when we diff against PR SHAs.
+          # Full history ('0') only when PR SHAs are provided so we can merge-base/diff.
+          # Use string '0' (not number 0): bare 0 is falsy in Actions expressions and
+          # would always fall through to 1. Shallow checkout ('1') is enough for scope=all.
           fetch-depth: ${{ (inputs.pr-base-sha != '' && inputs.pr-head-sha != '') && '0' || '1' }}
-          show-progress: ${{ runner.debug }}
+          # runner.debug is '1' or empty; checkout requires a boolean-like string.
+          show-progress: ${{ runner.debug == '1' && 'true' || 'false' }}
 
       - name: Setup PHP
+        # Pinned to v2.37.2 (newer than other workflows) to address zizmor known-vulnerable-actions.
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ inputs.php-version }}
@@ -127,7 +131,7 @@ jobs:
               scope="all"
             else
               echo "Determining changed PHP files between merge-base $merge_base and $HEAD_SHA..."
-              if ! mapfile -t CANDIDATES < <(git diff --name-only --diff-filter=ACMRT "$merge_base...$HEAD_SHA" -- ':(icase,glob)**/*.php'); then
+              if ! mapfile -t CANDIDATES < <(git diff --name-only --diff-filter=ACMRT "$merge_base".."$HEAD_SHA" -- ':(icase,glob)**/*.php'); then
                 echo "::notice::Unable to determine changed PHP files from git diff; falling back to scope=all."
                 scope="all"
                 CANDIDATES=()
@@ -136,12 +140,11 @@ jobs:
           fi
 
           if [[ "$scope" == "all" ]]; then
-            echo "Listing all PHP files in the repository..."
-            prune_args=()
-            for dir in $PATHS_IGNORE; do
-              prune_args+=( -path "./$dir" -o -path "./$dir/*" -o -path "*/$dir" -o -path "*/$dir/*" -o )
-            done
-            mapfile -t CANDIDATES < <(find . \( "${prune_args[@]}" -false \) -prune -o -type f -iname '*.php' -print | sed 's|^\./||')
+            echo "Listing tracked PHP files in the repository..."
+            # Prefer git ls-files over find: respects sparse checkouts and only
+            # includes tracked files (vendor/node_modules are typically untracked
+            # or already filtered via paths-ignore below).
+            mapfile -t CANDIDATES < <(git ls-files -z -- ':(icase,glob)**/*.php' | tr '\0' '\n')
           fi
 
           files_file="$RUNNER_TEMP/php-files.txt"
@@ -171,12 +174,14 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           echo "Found $count PHP file(s) to lint (scope: $scope)."
-          if [[ $count -gt 0 && "${DEBUG:-}" == "true" ]]; then
+          # runner.debug is '1' when Actions debug logging is enabled.
+          if [[ $count -gt 0 && "${DEBUG:-}" == "1" ]]; then
             echo "---"
             cat "$files_file"
             echo "---"
           fi
 
+          summary_list_limit=500
           {
             echo "## PHP Syntax Check"
             echo ""
@@ -187,7 +192,12 @@ jobs:
               echo "<details><summary>File list</summary>"
               echo ""
               echo '```'
-              cat "$files_file"
+              if [[ $count -gt $summary_list_limit ]]; then
+                head -n "$summary_list_limit" "$files_file"
+                echo "... and $((count - summary_list_limit)) more"
+              else
+                cat "$files_file"
+              fi
               echo '```'
               echo ""
               echo "</details>"
@@ -234,9 +244,12 @@ jobs:
               else
                 echo "::error file=${escaped_file}::${escaped_summary}"
               fi
-              echo "----- $file -----" >> "$fail_log"
-              echo "$output" >> "$fail_log"
-              echo "$output"
+              # Keep full php -l output in the failure log/summary only —
+              # annotations already surface the error in the Actions UI.
+              {
+                echo "----- $file -----"
+                echo "$output"
+              } >> "$fail_log"
             fi
           done < "$FILES_LIST"
 
