@@ -29,14 +29,14 @@ on:
       pr-base-sha:
         description: >
           Base commit SHA for PR diffing. Pass
-          `${{ github.event.pull_request.base.sha }}` from the caller.
+          github.event.pull_request.base.sha from the caller.
           Required when `scope=changed`.
         type: string
         default: ''
       pr-head-sha:
         description: >
           Head commit SHA for PR diffing. Pass
-          `${{ github.event.pull_request.head.sha }}` from the caller.
+          github.event.pull_request.head.sha from the caller.
           Required when `scope=changed`.
         type: string
         default: ''
