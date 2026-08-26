@@ -95,7 +95,7 @@ jobs:
     steps:
       - name: Checkout repository
         id: checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: true
 
@@ -175,7 +175,7 @@ jobs:
     steps:
       - name: Checkout repository
         id: checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: false
@@ -185,7 +185,7 @@ jobs:
         id: setup_php
         uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
         with:
-          php-version: "8.0"
+          php-version: "8.3"
 
       # Installs Composer deps so i18n-ci-pre (and i18n-ci-post in a later job) can run.
       - name: Install Composer dependencies
@@ -198,7 +198,7 @@ jobs:
       - name: Set up Node.js
         id: setup_node
         if: inputs.i18n-script-location == 'npm'
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
         with:
           node-version-file: '.nvmrc'
 
@@ -267,7 +267,7 @@ jobs:
       # Required. Uploads prepare diff for auto-translate / process-translations.
       - name: Save patch as an artifact
         id: upload_patch
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}/updated-translations.diff
@@ -290,7 +290,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: false
@@ -349,7 +349,7 @@ jobs:
 
       - name: Save patch as an artifact
         id: upload_patch
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}/updated-translations.diff
@@ -390,7 +390,7 @@ jobs:
     steps:
       - name: Checkout repository
         id: checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: false
@@ -415,7 +415,7 @@ jobs:
         id: setup_php
         uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
         with:
-          php-version: "8.0"
+          php-version: "8.3"
 
       # Installs Composer deps so i18n-ci-post can run.
       - name: Install Composer dependencies
@@ -428,7 +428,7 @@ jobs:
       - name: Set up Node.js
         id: setup_node
         if: inputs.i18n-script-location == 'npm'
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
         with:
           node-version-file: '.nvmrc'
 
@@ -438,7 +438,7 @@ jobs:
         if: inputs.i18n-script-location == 'npm'
         run: npm ci
 
-      # Runs i18n-ci-post to build MO/JSON so WordPress can use the translated strings.
+      # Runs i18n-ci-post to regenerate JED JSON and PHP (.l10n.php) translation files from PO catalogs.
       - name: Run i18n-ci-post scripts
         id: run_i18n_post
         env:
@@ -450,7 +450,7 @@ jobs:
         id: add_language_files
         run: git add -A languages/
 
-      # Captures i18n-ci-post changes (e.g. generated MO/JSON) for the artifact.
+      # Captures i18n-ci-post changes (e.g. generated JSON and .l10n.php) for the artifact.
       - name: Create a diff file
         id: create_diff
         run: |
@@ -496,7 +496,7 @@ jobs:
       # Uploads the final diff so create-translation-pr can apply and commit it.
       - name: Save patch as an artifact
         id: upload_patch
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: translations-${{ github.run_id }}
           path: ${{ runner.temp }}/updated-translations.diff
@@ -536,7 +536,7 @@ jobs:
     steps:
       - name: Checkout repository
         id: checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           ref: ${{ env.PR_BRANCH_NAME }}
           persist-credentials: true
