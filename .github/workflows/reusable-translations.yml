@@ -445,6 +445,43 @@ jobs:
           SCRIPT_LOCATION: ${{ inputs.i18n-script-location == 'npm' && 'npm' || 'composer' }}
         run: $SCRIPT_LOCATION run i18n-ci-post
 
+      # Workaround for WP-CLI bug: `wp i18n make-php` outputs a stray comma in
+      # the messages array when a PO file has zero translated strings, producing
+      # invalid PHP (e.g. 'messages' => [\n,\n]).  Strip the empty element so the
+      # generated file is syntactically valid.  See PRESS0-4223.
+      - name: Fix empty-messages comma in generated .l10n.php files
+        id: fix_l10n_comma
+        run: |
+          if [ -d languages ]; then
+            find languages -name '*.l10n.php' -print0 | while IFS= read -r -d '' f; do
+              if grep -qP "'messages'\s*=>\s*\[\s*," "$f"; then
+                sed -i -E "s/('messages'\s*=>\s*\[)\s*,/\1/" "$f"
+                echo "Fixed stray comma in $f"
+              fi
+            done
+          fi
+
+      # Validate that every generated .l10n.php file is syntactically valid PHP.
+      # This catches the WP-CLI bug above and any future generation issues.
+      - name: Validate .l10n.php syntax
+        id: validate_l10n
+        run: |
+          errors=0
+          if [ -d languages ]; then
+            while IFS= read -r -d '' f; do
+              if ! php -l "$f" > /dev/null 2>&1; then
+                php -l "$f" 2>&1
+                errors=$((errors + 1))
+              fi
+            done < <(find languages -name '*.l10n.php' -print0)
+          fi
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::Found $errors .l10n.php file(s) with PHP syntax errors."
+            exit 1
+          else
+            echo "All .l10n.php files passed syntax check."
+          fi
+
       # Stages new language files so they are included in the diff and PR.
       - name: Add any new language files
         id: add_language_files
