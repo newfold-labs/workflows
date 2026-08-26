@@ -5,7 +5,7 @@ on:
       php-version:
         description: The version of php to be used
         type: string
-        default: '8.1'
+        default: '8.2'
       node-version:
         description: The version of Node.js to be used
         type: string
@@ -103,7 +103,7 @@ jobs:
     steps:
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@44454db4f0199b8b9685a5d763dc37cbf79108e1 # v2.36.0
+        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
         with:
           php-version: ${{ inputs.php-version }}
           coverage: none
@@ -112,14 +112,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Checkout plugin
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: ${{ inputs.plugin-repo }}
           ref: ${{ inputs.plugin-branch }}
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
@@ -129,7 +129,7 @@ jobs:
         run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer vendor directory
-        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
@@ -144,7 +144,7 @@ jobs:
           npm --version
 
       - name: Install PHP Dependencies for Plugin
-        run: composer install --no-progress --no-dev --optimize-autoloader --prefer-dist
+        run: composer install --no-progress --no-dev --optimize-autoloader --prefer-source
 
       - name: NPM Install for Plugin
         run: npm ci --legacy-peer-deps
@@ -253,7 +253,7 @@ jobs:
         working-directory: ${{ env.DIST }}
         run: find .
 
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           path: ${{ steps.workflow.outputs.DIST }}
           name: ${{ inputs.artifact-name != '' && inputs.artifact-name || steps.workflow.outputs.PACKAGE }}
@@ -265,8 +265,10 @@ jobs:
           PACKAGE: ${{ steps.workflow.outputs.PACKAGE }}
         run: echo "{\"plugins\":[\"$DIST/$PACKAGE\"]}" > .wp-env.override.json
 
+      # Use the plugin's pinned @wordpress/env (via npx wp-env) so start/run share the same
+      # cache and runtime detection as Playwright global setup (matches plugin playwright workflows).
       - name: Install WordPress
-        run: npx @wordpress/env@latest start --debug
+        run: npx wp-env start --debug
 
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
@@ -293,7 +295,7 @@ jobs:
 
       - name: Store test results
         if: failure()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           path: |
             ./tests/playwright/test-results

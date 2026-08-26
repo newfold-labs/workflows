@@ -1,0 +1,281 @@
+name: Reusable - Dependabot Auto-Merge
+on:
+  workflow_call:
+    inputs:
+      merge-method:
+        description: How to merge each PR. One of merge | squash | rebase.
+        type: string
+        default: squash
+      update-types:
+        description: >-
+          Comma-separated semver bump types that may auto-merge
+          (any of: patch, minor, major). Default leaves majors for a human.
+        type: string
+        default: patch,minor
+      pr-limit:
+        description: Maximum number of open Dependabot PRs to evaluate per sweep.
+        type: string
+        default: "50"
+      dry-run:
+        description: When true, log what would be merged without approving or merging.
+        type: boolean
+        default: false
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions are configured individually on the job.
+permissions: {}
+
+# Keep a manual workflow_dispatch from overlapping a scheduled sweep on the same
+# repo. Queue rather than cancel so an in-flight merge is never interrupted.
+# github.repository is the caller's repo, so each consumer gets its own group.
+concurrency:
+  group: dependabot-auto-merge-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  # Periodic batch sweep (caller fires this on a cron schedule, not per-PR).
+  #
+  # Each run discovers every open Dependabot PR on the caller's repo and merges
+  # the ones that are eligible: open, not draft, mergeable (no conflicts), all
+  # check runs green, and a bump type the caller opted into. PRs that are not yet
+  # eligible (CI still running, a conflict awaiting Dependabot rebase, a major
+  # bump) are simply left for a human or for the next sweep — there is no per-PR
+  # event wiring and no SHA passed in by the caller.
+  #
+  # Mergeability is re-read per PR immediately before merging, so when several
+  # PRs touch the same lockfile, merging the first turns the rest "dirty" and
+  # they are skipped this pass rather than merged into a conflict.
+  dependabot-auto-merge:
+    runs-on: ubuntu-latest
+    # checks: read is required for the Checks API call that gates on check-run
+    # status; without it the call 403s and nothing is ever merged.
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+    timeout-minutes: 10
+    steps:
+      - name: Validate inputs
+        env:
+          MERGE_METHOD: ${{ inputs.merge-method }}
+          UPDATE_TYPES: ${{ inputs.update-types }}
+          PR_LIMIT: ${{ inputs.pr-limit }}
+        run: |
+          case "$MERGE_METHOD" in
+            merge|squash|rebase) ;;
+            *) echo "::error::invalid merge-method '$MERGE_METHOD' (expected merge|squash|rebase)"; exit 1 ;;
+          esac
+          IFS=',' read -ra _types <<<"$UPDATE_TYPES"
+          for t in "${_types[@]}"; do
+            case "${t// /}" in
+              patch|minor|major) ;;
+              "") ;;
+              *) echo "::error::invalid update-types entry '$t' (expected patch|minor|major)"; exit 1 ;;
+            esac
+          done
+          if ! [[ "$PR_LIMIT" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::pr-limit must be a positive integer, got '$PR_LIMIT'"; exit 1
+          fi
+
+      - name: Sweep and merge eligible Dependabot PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          MERGE_METHOD: ${{ inputs.merge-method }}
+          UPDATE_TYPES: ${{ inputs.update-types }}
+          PR_LIMIT: ${{ inputs.pr-limit }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -u
+
+          # Classify the most severe semver bump named in a Dependabot PR's
+          # title/body. Grouped PRs list several bumps; the worst one wins, so a
+          # group containing any major is treated as major. Prints one of:
+          # major | minor | patch | unknown (unknown when no version pair parses,
+          # e.g. SHA-only action pins — left for a human).
+          classify_bump() {
+            PR_TITLE="$1" PR_BODY="$2" python3 - <<'PY'
+          import os, re
+          text = os.environ.get("PR_TITLE", "") + "\n" + os.environ.get("PR_BODY", "")
+          pairs = re.findall(
+              r'from\s+`?v?(\d+(?:\.\d+)*)`?\s+to\s+`?v?(\d+(?:\.\d+)*)`?',
+              text, re.IGNORECASE)
+          def severity(old, new):
+              o = [int(x) for x in old.split('.')]
+              n = [int(x) for x in new.split('.')]
+              width = max(len(o), len(n))
+              o += [0] * (width - len(o))
+              n += [0] * (width - len(n))
+              for i in range(width):
+                  if o[i] != n[i]:
+                      return 0 if i == 0 else (1 if i == 1 else 2)
+              return 2  # identical -> harmless, treat as patch
+          if not pairs:
+              print("unknown")
+          else:
+              print(["major", "minor", "patch"][min(severity(o, n) for o, n in pairs)])
+          PY
+          }
+
+          # Verdict on a PR's checks, read from the statusCheckRollup already
+          # fetched with the PR (no extra API call). Each check is collapsed to its
+          # latest run by name, so a stale cancelled/failed run left beside a newer
+          # success — common with concurrency: cancel-in-progress — does not wedge a
+          # green PR forever. Legacy commit statuses (StatusContext) are covered too,
+          # not just Actions check runs. Prints one of:
+          #   green        -> every latest check completed and passed (success/skipped/neutral)
+          #   none         -> no checks reported yet (defer; CI may not have started)
+          #   pending:<n>  -> at least one latest check has not completed
+          #   failing:<n>  -> all completed but at least one did not pass
+          CHECKS_JQ='
+            [ .statusCheckRollup[]?
+              | if .__typename == "StatusContext"
+                then { name: .context,
+                       ts: (.createdAt // ""),
+                       completed: (.state != "PENDING" and .state != "EXPECTED"),
+                       pass: (.state == "SUCCESS") }
+                else { name: .name,
+                       ts: (.completedAt // .startedAt // ""),
+                       completed: (.status == "COMPLETED"),
+                       pass: ((.conclusion // "") | IN("SUCCESS","SKIPPED","NEUTRAL")) }
+                end ]
+            | group_by(.name) | map(max_by(.ts))
+            | if length == 0 then "none"
+              elif map(select(.completed | not)) | length > 0
+                then "pending:" + (map(select(.completed | not))[0].name)
+              elif map(select(.pass | not)) | length > 0
+                then "failing:" + (map(select(.pass | not))[0].name)
+              else "green" end
+          '
+          checks_verdict() { jq -r "$CHECKS_JQ" <<<"$1"; }
+
+          # Rows accumulated for the run summary ($GITHUB_STEP_SUMMARY) written at
+          # the end, so an operator can see at a glance what merged and — more
+          # importantly — why each remaining PR was left behind.
+          declare -a SUMMARY_ROWS=()
+          summary_row() {  # $1=number  $2=title  $3=result. Escape pipes for the table.
+            local t="${2//|/\\|}"
+            SUMMARY_ROWS+=("| #$1 | ${t} | $3 |")
+          }
+
+          # Normalise the allow-list to a space-padded string for membership tests
+          # (strip spaces, turn commas into spaces, pad the ends).
+          _clean="${UPDATE_TYPES// /}"
+          allowed=" ${_clean//,/ } "
+
+          # gh's GraphQL author field reports Dependabot's login as "app/dependabot"
+          # (is_bot=true), not "dependabot[bot]" as the REST API / @mentions do.
+          # Match on is_bot + a dependabot login suffix so both forms are covered.
+          mapfile -t prs < <(
+            gh pr list --repo "$REPO" --state open --limit "$PR_LIMIT" \
+              --json number,author \
+              --jq '.[] | select(.author.is_bot and (.author.login | endswith("dependabot"))) | .number'
+          )
+
+          if [[ "${#prs[@]}" -eq 0 ]]; then
+            echo "::notice::no open Dependabot PRs found"
+            {
+              echo "### Dependabot auto-merge"
+              echo ""
+              echo "No open Dependabot PRs found."
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            exit 0
+          fi
+          echo "Found ${#prs[@]} open Dependabot PR(s): ${prs[*]}"
+
+          merged=0
+          for num in "${prs[@]}"; do
+            echo "::group::PR #${num}"
+
+            # Fresh read: an earlier merge in this same sweep may have made this PR
+            # dirty or stale, so never trust a list snapshot here. GitHub computes
+            # mergeability asynchronously and returns UNKNOWN until it settles;
+            # re-reading triggers that computation, so retry a few times before
+            # giving up and deferring to the next sweep.
+            data=""; mergeable="UNKNOWN"
+            for attempt in 1 2 3 4 5; do
+              data=$(gh pr view "$num" --repo "$REPO" \
+                --json title,body,isDraft,mergeable,statusCheckRollup 2>/dev/null) || {
+                echo "::notice::could not read PR #${num}; skipping"; data=""; break
+              }
+              mergeable=$(jq -r '.mergeable' <<<"$data")
+              [[ "$mergeable" != "UNKNOWN" ]] && break
+              echo "::notice::  PR #${num} mergeable still UNKNOWN (attempt ${attempt}); waiting for GitHub"
+              sleep 3
+            done
+            if [[ -z "$data" ]]; then
+              summary_row "$num" "(could not read PR)" "skipped — unreadable"
+              echo "::endgroup::"; continue
+            fi
+            title=$(jq -r '.title' <<<"$data")
+            body=$(jq -r '.body // ""' <<<"$data")
+            is_draft=$(jq -r '.isDraft' <<<"$data")
+            echo "title: ${title}"
+
+            if [[ "$is_draft" == "true" ]]; then
+              echo "::notice::PR #${num} is a draft; skipping"
+              summary_row "$num" "$title" "skipped — draft"; echo "::endgroup::"; continue
+            fi
+
+            bump=$(classify_bump "$title" "$body")
+            if [[ "$allowed" != *" $bump "* ]]; then
+              echo "::notice::PR #${num} bump type '${bump}' not in update-types (${UPDATE_TYPES}); leaving for review"
+              summary_row "$num" "$title" "left for review — ${bump} bump"; echo "::endgroup::"; continue
+            fi
+
+            # MERGEABLE = no conflicts. CONFLICTING (dirty) is left for Dependabot
+            # to rebase; UNKNOWN here means GitHub never settled even after the
+            # retries above — defer to the next sweep.
+            if [[ "$mergeable" != "MERGEABLE" ]]; then
+              echo "::notice::PR #${num} mergeable=${mergeable}; skipping this sweep"
+              summary_row "$num" "$title" "deferred — mergeable=${mergeable}"; echo "::endgroup::"; continue
+            fi
+
+            verdict=$(checks_verdict "$data")
+            case "$verdict" in
+              green) ;;
+              none)
+                echo "::notice::PR #${num} has no checks reported yet; deferring"
+                summary_row "$num" "$title" "deferred — no checks yet"; echo "::endgroup::"; continue ;;
+              pending:*)
+                echo "::notice::PR #${num} check '${verdict#pending:}' not complete; deferring"
+                summary_row "$num" "$title" "deferred — CI pending"; echo "::endgroup::"; continue ;;
+              failing:*)
+                echo "::notice::PR #${num} check '${verdict#failing:}' not passing; skipping"
+                summary_row "$num" "$title" "skipped — failing: ${verdict#failing:}"; echo "::endgroup::"; continue ;;
+            esac
+
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "::notice::[dry-run] would approve and ${MERGE_METHOD}-merge PR #${num} (${bump})"
+              summary_row "$num" "$title" "would merge (${bump}) — dry run"; echo "::endgroup::"; continue
+            fi
+
+            # Re-approve every sweep so repos that dismiss stale approvals on a
+            # Dependabot rebase stay approved. Best-effort: approval may be a no-op
+            # where it already exists, and must not abort the merge.
+            gh pr review --approve --repo "$REPO" "$num" || \
+              echo "::notice::approval on PR #${num} was a no-op or not permitted; continuing"
+
+            if gh pr merge --repo "$REPO" "--$MERGE_METHOD" "$num"; then
+              echo "::notice::merged PR #${num} (${bump})"
+              summary_row "$num" "$title" "merged (${bump})"
+              merged=$((merged + 1))
+            else
+              echo "::notice::merge of PR #${num} failed (likely branch protection or a race); leaving for next sweep"
+              summary_row "$num" "$title" "merge failed — see log"
+            fi
+            echo "::endgroup::"
+          done
+
+          echo "Sweep complete: merged ${merged} PR(s)."
+
+          {
+            echo "### Dependabot auto-merge"
+            echo ""
+            [[ "$DRY_RUN" == "true" ]] && { echo "_Dry run — nothing was actually merged._"; echo ""; }
+            echo "Evaluated **${#prs[@]}** open Dependabot PR(s); merged **${merged}**."
+            echo ""
+            echo "| PR | Title | Result |"
+            echo "| -- | ----- | ------ |"
+            printf '%s\n' "${SUMMARY_ROWS[@]}"
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"

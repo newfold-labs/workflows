@@ -1,11 +1,31 @@
+"""
+Translate empty msgstr entries in PO files under languages/ via Azure Translator.
+
+Locale JSON (and other derived assets) are not handled here; they are regenerated
+from the PO catalogs by the repo's i18n-ci-post / WP-CLI flow.
+"""
 import os
-import json
 import re
 import requests
 import polib
 from pathlib import Path
 
 TEXT_DOMAIN = os.getenv("TEXT_DOMAIN")
+
+
+def _env_bool(name: str, *, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+# When saving PO files, polib only supports one formatting option: wrapwidth.
+# - TRANSLATE_PO_NOWRAP: default true (no wrap, wrapwidth 0). Set to false/0/no to wrap at TRANSLATE_PO_WRAPWIDTH.
+# - TRANSLATE_PO_WRAPWIDTH: max line length when wrapping (default 77). Ignored when nowrap is on.
+#   Note: polib joins reference comments (#: file:line) with spaces; nowrap makes long single lines.
+PO_NOWRAP = _env_bool("TRANSLATE_PO_NOWRAP", default=True)
+PO_WRAPWIDTH = 0 if PO_NOWRAP else int(os.getenv("TRANSLATE_PO_WRAPWIDTH", "77"))
 
 def extract_lang_from_filename(filename):
     pattern = fr'{re.escape(TEXT_DOMAIN)}-([a-z]{{2,3}}(?:_[A-Z]{{2}})?)'
@@ -56,7 +76,7 @@ def translate_entries(entries, get_id_context, apply_translation, lang):
         translated = strip_context_from_translation(translated) if had_context else translated.strip()
         apply_translation(entry, translated)
 
-# Translate .po files
+# Translate .po files (only save when we actually translate something to avoid formatting-only diffs)
 for path in Path('languages').rglob('*.po'):
     lang = extract_lang_from_filename(path.name)
     print(f"Language detected: {lang}")
@@ -64,8 +84,11 @@ for path in Path('languages').rglob('*.po'):
         continue
 
     print(f"Processing file: {path}")
-    po = polib.pofile(str(path))
+    po = polib.pofile(str(path), wrapwidth=PO_WRAPWIDTH)
     entries_to_translate = [entry for entry in po if not entry.msgstr.strip() and entry.msgid.strip()]
+
+    if not entries_to_translate:
+        continue
 
     def get_po_id_context(entry):
         return entry.msgid, entry.msgctxt
@@ -75,57 +98,3 @@ for path in Path('languages').rglob('*.po'):
 
     translate_entries(entries_to_translate, get_po_id_context, apply_po_translation, lang)
     po.save()
-
-# Translate .json files
-CONTEXT_SEPARATORS = ["|", "\u0004"]
-
-def split_context_key(key):
-    for sep in CONTEXT_SEPARATORS:
-        if sep in key:
-            context, msgid = key.split(sep, 1)
-            return context, msgid, sep
-    return None, key, None
-
-for path in Path('languages').rglob('*.json'):
-    lang = extract_lang_from_filename(path.name)
-    print(f"Language detected: {lang}")
-    if not lang:
-        continue
-
-    print(f"Processing file: {path}")
-    with open(path, 'r', encoding='utf-8') as f:
-        try:
-            content = json.load(f)
-        except json.JSONDecodeError:
-            continue
-
-    if "locale_data" not in content or "messages" not in content["locale_data"]:
-        continue
-
-    messages = content["locale_data"]["messages"]
-    keys_to_translate = []
-    key_info_map = {}
-
-    for key, val in messages.items():
-        if key == "" or not isinstance(val, list) or val[0].strip():
-            continue
-        context, msgid, sep = split_context_key(key)
-        composed = compose_msg_with_context(msgid, context)
-        keys_to_translate.append(composed)
-        key_info_map[key] = (msgid, context, sep)
-
-    if not keys_to_translate:
-        continue
-
-    translated_texts = batch_translate(keys_to_translate, lang)
-    if not translated_texts:
-        continue
-
-    for key, translated in zip(key_info_map.keys(), translated_texts):
-        _, context, _ = key_info_map[key]
-        if context:
-            translated = strip_context_from_translation(translated)
-        messages[key] = [translated.strip()]
-
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(content, f, ensure_ascii=False, indent=2)
