@@ -273,7 +273,7 @@ jobs:
       - name: Verify wp-env
         working-directory: ${{ github.workspace }}
         run: npx wp-env run cli wp core version
-        
+
       - name: Get Playwright version
         id: playwright-version
         run: echo "version=$(node -e 'console.log(require("@playwright/test/package.json").version)')" >> "$GITHUB_OUTPUT"
