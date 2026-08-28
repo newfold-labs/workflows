@@ -65,7 +65,7 @@ on:
       node-version:
         description: The version of node to be used
         type: string
-        default: '22'
+        default: '24.15.0'
       plugin-repo:
         description: The plugin repo
         type: string
@@ -270,6 +270,10 @@ jobs:
       - name: Install WordPress
         run: npx wp-env start --debug
 
+      - name: Verify wp-env
+        working-directory: ${{ github.workspace }}
+        run: npx wp-env run cli wp core version
+        
       - name: Get Playwright version
         id: playwright-version
         run: echo "version=$(node -e 'console.log(require("@playwright/test/package.json").version)')" >> "$GITHUB_OUTPUT"
