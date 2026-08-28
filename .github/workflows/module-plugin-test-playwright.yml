@@ -65,7 +65,7 @@ on:
       node-version:
         description: The version of node to be used
         type: string
-        default: '22'
+        default: '24.15.0'
       plugin-repo:
         description: The plugin repo
         type: string
@@ -269,6 +269,10 @@ jobs:
       # cache and runtime detection as Playwright global setup (matches plugin playwright workflows).
       - name: Install WordPress
         run: npx wp-env start --debug
+
+      - name: Verify wp-env
+        working-directory: ${{ github.workspace }}
+        run: npx wp-env run cli wp core version
 
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
