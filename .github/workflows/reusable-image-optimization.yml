@@ -7,13 +7,19 @@ on:
         description: 'The event that triggered the workflow'
         required: true
         type: string
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured at the job level.
+permissions: {}
+
 jobs:
   optimize-images:
     name: Optimize Images
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write      # Required so calibreapp/image-actions can commit optimized images back to the pull request head branch, and so peter-evans/create-pull-request can push a new image-optimization branch on push events.
+      pull-requests: write # Required so calibreapp/image-actions can comment on the pull request with the optimization summary and so peter-evans/create-pull-request can open the optimization PR.
+    timeout-minutes: 20
 
     steps:
       - name: Checkout

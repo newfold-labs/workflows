@@ -16,7 +16,7 @@ on:
         required: true
 
 # Disable permissions for all available scopes by default.
-# Any needed permissions should be configured individually for each job.
+# Any needed permissions should be configured at the job level.
 permissions: {}
 
 jobs:
@@ -24,7 +24,8 @@ jobs:
     name: Deploy Cloudflare Worker
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read # Required for actions/checkout to clone the (private) caller repository. The deploy step authenticates to Cloudflare via CLOUDFLARE_API_TOKEN, not GITHUB_TOKEN.
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3

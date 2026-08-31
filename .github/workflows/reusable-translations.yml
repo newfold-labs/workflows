@@ -67,12 +67,12 @@ on:
       TRANSLATOR_API_KEY:
         required: true
 
-# Disable permissions for all available scopes by default.
-# Any needed permissions should be configured individually for each job.
-permissions: {}
-
 env:
   PR_BRANCH_NAME: ${{ format( 'auto-translate/{0}', ( github.event_name == 'pull_request' && github.head_ref || github.ref_name ) ) }}
+
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured at the job level.
+permissions: {}
 
 jobs:
   # This job works to ensure that the HEAD branch is present and up to date with the BASE branch.
@@ -87,8 +87,9 @@ jobs:
     name: Prepare Pull Request Branch
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: read
+      contents: write     # Required to clone the (private) caller repository and to push/delete the `auto-translate/<ref>` branch using the persisted GITHUB_TOKEN.
+      pull-requests: read # Required so `gh pr list` and `gh pr update-branch` can locate an existing translations pull request.
+    timeout-minutes: 10
     outputs:
       pr_found: ${{ steps.check_pr.outputs.found }}
 
@@ -168,7 +169,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ 'prepare-pr-branch' ]
     permissions:
-      contents: read
+      contents: read # Required for actions/checkout to clone the (private) caller repository at the auto-translate branch.
+    timeout-minutes: 20
     outputs:
       has_untranslated: ${{ steps.check_untranslated.outputs.has_untranslated }}
 
@@ -286,7 +288,8 @@ jobs:
       inputs.run-azure-ai-translate &&
       needs.prepare-for-translation.outputs.has_untranslated == 'true'
     permissions:
-      contents: read
+      contents: read # Required for actions/checkout to clone the (private) caller repository at the auto-translate branch.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -385,7 +388,8 @@ jobs:
         needs.auto-translate-with-azure.result == 'skipped'
       )
     permissions:
-      contents: read
+      contents: read # Required for actions/checkout to clone the (private) caller repository at the auto-translate branch.
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -567,8 +571,9 @@ jobs:
       ) &&
       needs.process-translations.result == 'success'
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write      # Required to clone the (private) caller repository and to push the auto-translate branch using the persisted GITHUB_TOKEN.
+      pull-requests: write # Required so `gh pr create` can open the translations pull request when no open one exists yet.
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository

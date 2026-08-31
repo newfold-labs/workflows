@@ -16,15 +16,15 @@ on:
         required: true
 
 # Disable permissions for all available scopes by default.
-# Any needed permissions should be configured individually for each job.
+# Any needed permissions should be configured at the job level.
 permissions: {}
 
 jobs:
   update-i18n:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write # Required so the persisted GITHUB_TOKEN can push the generated translation branch back to the repository. The pull request itself is opened via actions/github-script using NEWFOLD_ACCESS_TOKEN, so pull-requests: write is not needed on GITHUB_TOKEN.
+    timeout-minutes: 20
 
     steps:
       - name: Checkout Repository

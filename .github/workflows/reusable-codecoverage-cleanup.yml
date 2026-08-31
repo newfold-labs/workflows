@@ -39,11 +39,16 @@ on:
         description: GitHub token for pushing to gh-pages (defaults to GITHUB_TOKEN if not set)
         required: false
 
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured at the job level.
+permissions: {}
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # Required to clone the (private) caller repository and to push the gh-pages cleanup commit (or force-push the squashed history) using the persisted GITHUB_TOKEN.
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repository (all refs for reachability check)
