@@ -4,8 +4,10 @@
 #
 # This workflow assumes the following:
 # - Translation catalogs live under `languages/` (`.po` and `.pot`). After `i18n-ci-pre`, PO/POT files are normalized
-#   with GNU gettext `msgcat` (stable sort, no wrap) so diffs stay string-focused. Azure translation and PR steps run
-#   only when `msgfmt --statistics` reports at least one untranslated message in a `.po` file.
+#   with GNU gettext `msgcat` (stable sort, no wrap) so diffs stay string-focused. When `languages/` is missing, or when
+#   a `.pot` file exists but contains no translatable `msgid` entries (header-only template), normalization and later
+#   translation steps are skipped. Azure translation and PR steps run only when `msgfmt --statistics` reports at least
+#   one untranslated message in a `.po` file.
 # - Optional inputs `po-wrapwidth` and `po-nowrap` control how the Python translate script writes PO files when it runs
 #   (match local gettext/xgettext to reduce formatting-only diffs).
 # - The calling repository has a `i18n`, `i18n-ci-pre`, `i18n-ci-post` in the `composer.json` file.
@@ -160,6 +162,7 @@ jobs:
   # - Sets up Node.js (if necessary).
   # - Installs npm dependencies (if necessary).
   # - Runs the `i18n-ci-pre` script to ensure that all strings are accounted for.
+  # - Skips when `languages/` is missing or when `.pot` files contain no translatable strings (header-only catalogs).
   # - Normalizes PO/POT with msgcat and logs `msgfmt --statistics` per file; sets job output `has_untranslated`.
   # - Creates a diff file of the changes.
   # - Saves the diff file as an artifact for use in future steps.
@@ -170,6 +173,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      has_catalog_strings: ${{ steps.check_untranslated.outputs.has_catalog_strings }}
       has_untranslated: ${{ steps.check_untranslated.outputs.has_untranslated }}
 
     steps:
@@ -221,33 +225,62 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y gettext
+
+          count_pot_translatable_strings() {
+            local pot_file="$1"
+            grep '^msgid "' "$pot_file" | grep -cv '^msgid ""$' || true
+          }
+
+          has_catalog_strings=false
           if [ -d languages ]; then
-            find languages \( -name '*.po' -o -name '*.pot' \) -type f -print0 | while IFS= read -r -d '' f; do
-              msgcat --sort-output --no-wrap -o "$f.msgcat.tmp" "$f"
-              mv "$f.msgcat.tmp" "$f"
-            done
-          else
-            echo "::notice::No languages/ directory; skipping PO/POT normalization."
+            while IFS= read -r -d '' pot; do
+              translatable_count=$(count_pot_translatable_strings "$pot")
+              if [ "$translatable_count" -gt 0 ]; then
+                has_catalog_strings=true
+                break
+              fi
+            done < <(find languages -name '*.pot' -type f -print0 2>/dev/null)
           fi
+
+          if [ "$has_catalog_strings" != "true" ]; then
+            echo "has_catalog_strings=false" >> "$GITHUB_OUTPUT"
+            echo "has_untranslated=false" >> "$GITHUB_OUTPUT"
+            if [ ! -d languages ]; then
+              echo "::notice::No languages/ directory; skipping PO/POT normalization, Azure translation, post-processing, and PR."
+            else
+              echo "::notice::No translatable strings in POT catalog; skipping PO/POT normalization, Azure translation, post-processing, and PR."
+            fi
+            exit 0
+          fi
+
+          echo "has_catalog_strings=true" >> "$GITHUB_OUTPUT"
+
+          find languages \( -name '*.po' -o -name '*.pot' \) -type f -print0 | while IFS= read -r -d '' f; do
+            if ! msgcat --sort-output --no-wrap -o "$f.msgcat.tmp" "$f"; then
+              echo "::warning::msgcat failed for $f; skipping normalization for this file."
+              rm -f "$f.msgcat.tmp"
+              continue
+            fi
+            mv "$f.msgcat.tmp" "$f"
+          done
+
           total_untranslated=0
-          if [ -d languages ]; then
+          echo ""
+          echo "msgfmt --statistics (full output per .po file):"
+          echo "----------------------------------------"
+          while IFS= read -r -d '' f; do
+            stats=$(msgfmt --statistics -o /dev/null "$f" 2>&1 || true)
+            echo "$f"
+            echo "$stats"
             echo ""
-            echo "msgfmt --statistics (full output per .po file):"
-            echo "----------------------------------------"
-            while IFS= read -r -d '' f; do
-              stats=$(msgfmt --statistics -o /dev/null "$f" 2>&1 || true)
-              echo "$f"
-              echo "$stats"
-              echo ""
-              while read -r line; do
-                n=$(echo "$line" | grep -oE '^[0-9]+' || true)
-                if [ -n "$n" ]; then
-                  total_untranslated=$((total_untranslated + n))
-                fi
-              done < <(echo "$stats" | grep -oE '[0-9]+ untranslated message' || true)
-            done < <(find languages -name '*.po' -type f -print0 2>/dev/null)
-            echo "----------------------------------------"
-          fi
+            while read -r line; do
+              n=$(echo "$line" | grep -oE '^[0-9]+' || true)
+              if [ -n "$n" ]; then
+                total_untranslated=$((total_untranslated + n))
+              fi
+            done < <(echo "$stats" | grep -oE '[0-9]+ untranslated message' || true)
+          done < <(find languages -name '*.po' -type f -print0 2>/dev/null)
+          echo "----------------------------------------"
           echo "Total untranslated messages (sum across .po files): $total_untranslated"
           if [ "$total_untranslated" -gt 0 ]; then
             echo "has_untranslated=true" >> "$GITHUB_OUTPUT"
