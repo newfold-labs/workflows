@@ -384,13 +384,13 @@ jobs:
           set -e
 
           MARKER="<!-- module-dependency-updates -->"
-          COMMENT_BODY=$(printf '%s\n\n%s\n\n_Compared locked `newfold-labs/wp-module-*` packages to tag `%s`._' \
+          COMMENT_BODY=$(printf "%s\n\n%s\n\n_Compared locked \`newfold-labs/wp-module-*\` packages to tag \`%s\`._" \
             "$MARKER" "$SUMMARY" "$BASELINE_TAG")
 
           REPO="${PLUGIN_REPO}"
           ISSUE_COMMENTS="repos/${REPO}/issues/${PR_NUMBER}/comments"
           EXISTING_ID=$(gh api "$ISSUE_COMMENTS" --paginate \
-            --jq ".[] | select(.body | contains(\"${MARKER}\")) | .id" | head -1)
+            --jq '.[] | select(.body | contains($marker)) | .id' --arg marker "$MARKER" | head -1)
 
           if [ -n "$EXISTING_ID" ]; then
             gh api --method PATCH "repos/${REPO}/issues/comments/${EXISTING_ID}" \
