@@ -58,6 +58,7 @@ jobs:
   # - Run the i18n command (if defined)
   # - List tags
   # - Get merged PRs since last tag/release
+  # - Summarize newfold-labs/wp-module-* dependency changes vs the last release tag
   # - Create a release branch
   # - Commit the changes
   # - Create a pull request to the target branch (main)
@@ -232,6 +233,90 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Get wp-module dependency changes
+        id: module-deps
+        run: |
+          set -e
+
+          LATEST_TAG=$(git describe --tags "$(git rev-list --tags --max-count=1)" 2>/dev/null || echo "")
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "baseline_tag=" >> "$GITHUB_OUTPUT"
+            echo "::notice::No previous tag found; skipping wp-module dependency summary."
+            exit 0
+          fi
+
+          echo "baseline_tag=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
+
+          if ! git cat-file -e "${LATEST_TAG}:composer.lock" 2>/dev/null; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No composer.lock at tag ${LATEST_TAG}; skipping wp-module dependency summary."
+            exit 0
+          fi
+
+          git show "${LATEST_TAG}:composer.lock" > /tmp/old-composer.lock
+
+          SUMMARY=$(node <<'NODE'
+          const fs = require('fs');
+
+          const modulePrefix = 'newfold-labs/wp-module-';
+
+          function getModuleVersions(lockPath) {
+            const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+            const packages = [...(lock.packages || []), ...(lock['packages-dev'] || [])];
+            const map = new Map();
+            for (const pkg of packages) {
+              if (pkg.name && pkg.name.startsWith(modulePrefix)) {
+                map.set(pkg.name, pkg.version);
+              }
+            }
+            return map;
+          }
+
+          function shortName(fullName) {
+            return fullName.replace(/^newfold-labs\/wp-module-/, '').replace(/-/g, ' ');
+          }
+
+          const oldMap = getModuleVersions('/tmp/old-composer.lock');
+          const newMap = getModuleVersions('composer.lock');
+          const lines = [];
+
+          for (const name of [...new Set([...oldMap.keys(), ...newMap.keys()])].sort()) {
+            const oldVer = oldMap.get(name);
+            const newVer = newMap.get(name);
+            if (oldVer === newVer) {
+              continue;
+            }
+            if (oldVer && newVer) {
+              lines.push(`- ${shortName(name)}: ${oldVer} > ${newVer}`);
+            } else if (newVer) {
+              lines.push(`- ${shortName(name)}: (new) ${newVer}`);
+            } else if (oldVer) {
+              lines.push(`- ${shortName(name)}: ${oldVer} > (removed)`);
+            }
+          }
+
+          if (lines.length === 0) {
+            process.exit(0);
+          }
+
+          process.stdout.write(`## Module Updates\n\n${lines.join('\n')}`);
+          NODE
+          )
+
+          if [ -z "$SUMMARY" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "summary<<EOF"
+            echo "$SUMMARY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       # create the release branch, commit the changes with the github-actions[bot]
       - name: Create and commit to release branch
         id: push-changes
@@ -284,6 +369,35 @@ jobs:
             --draft )
 
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          PR_NUMBER=$(gh pr view "$RELEASE_BRANCH" --json number -q .number)
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Comment wp-module dependency updates on release PR
+        if: steps.module-deps.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLUGIN_REPO: ${{ inputs.plugin-repo }}
+          PR_NUMBER: ${{ steps.create_pr.outputs.pr_number }}
+          SUMMARY: ${{ steps.module-deps.outputs.summary }}
+          BASELINE_TAG: ${{ steps.module-deps.outputs.baseline_tag }}
+        run: |
+          set -e
+
+          MARKER="<!-- module-dependency-updates -->"
+          COMMENT_BODY=$(printf '%s\n\n%s\n\n_Compared locked `newfold-labs/wp-module-*` packages to tag `%s`._' \
+            "$MARKER" "$SUMMARY" "$BASELINE_TAG")
+
+          REPO="${PLUGIN_REPO}"
+          ISSUE_COMMENTS="repos/${REPO}/issues/${PR_NUMBER}/comments"
+          EXISTING_ID=$(gh api "$ISSUE_COMMENTS" --paginate \
+            --jq ".[] | select(.body | contains(\"${MARKER}\")) | .id" | head -1)
+
+          if [ -n "$EXISTING_ID" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${EXISTING_ID}" \
+              -f body="$COMMENT_BODY"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$COMMENT_BODY"
+          fi
 
       - name: Write release summary to workflow summary
         env:
@@ -294,6 +408,8 @@ jobs:
           I18N_OUTPUT_MESSAGE: ${{ steps.run-i18n.outputs.message }}
           MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
           PR_URL: ${{ steps.create_pr.outputs.pr_url }}
+          MODULE_DEPS_SUMMARY: ${{ steps.module-deps.outputs.summary }}
+          MODULE_DEPS_BASELINE: ${{ steps.module-deps.outputs.baseline_tag }}
         run: |
           {
             echo "## 🚀 Release Prep Summary"
@@ -302,6 +418,12 @@ jobs:
             echo "- **Release branch created**: \`release/${NEW_VERSION}\`"
             echo "- **Pull request created**: ${PR_URL}"
             echo ""
+            if [ -n "${MODULE_DEPS_SUMMARY}" ]; then
+              echo "${MODULE_DEPS_SUMMARY}"
+              echo ""
+              echo "_Baseline tag: \`${MODULE_DEPS_BASELINE}\`_"
+              echo ""
+            fi
             echo "### Merged PRs since last release"
             echo "${MERGED_PRS}"
             echo ""
