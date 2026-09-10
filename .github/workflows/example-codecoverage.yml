@@ -20,13 +20,16 @@ on:
   pull_request:
     branches: [ main ]
 
-permissions:
-  contents: write
-  pull-requests: write
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured at the job level.
+permissions: {}
 
 jobs:
   codecoverage:
     if: github.repository != 'newfold-labs/workflows'
+    permissions:
+      contents: write      # Required so the reusable workflow can commit coverage reports to the gh-pages branch.
+      pull-requests: write # Required so the reusable workflow can post coverage comments on pull requests.
     uses: newfold-labs/workflows/.github/workflows/reusable-codecoverage.yml@f0b26152e4ea40cd40429e06b1f30aa8879e7392
     with:
       php-versions: '["7.4", "8.0", "8.1", "8.2", "8.3", "8.4"]'

@@ -3,7 +3,7 @@ on:
   workflow_call:
 
 # Disable permissions for all available scopes by default.
-# Any needed permissions should be configured individually for each job.
+# Any needed permissions should be configured at the job level.
 permissions: {}
 
 jobs:
@@ -15,7 +15,8 @@ jobs:
   yaml-lint:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read # Required for actions/checkout to clone the (private) caller repository so yamllint can scan its YAML files.
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -52,7 +53,7 @@ jobs:
     name: Actionlint
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      contents: read # Required for actions/checkout to clone the (private) caller repository so actionlint can scan its workflow files.
     timeout-minutes: 5
     steps:
       - name: Checkout repository
@@ -121,9 +122,9 @@ jobs:
     name: Octoscan
     runs-on: ubuntu-24.04
     permissions:
-      security-events: write
-      actions: read
-      contents: read
+      security-events: write # Required so github/codeql-action/upload-sarif can publish octoscan results to the repository's code scanning alerts.
+      actions: read          # Required by github/codeql-action/upload-sarif to read the workflow run metadata associated with the SARIF upload.
+      contents: read         # Required for actions/checkout to clone the (private) caller repository so octoscan can scan its workflow files.
     timeout-minutes: 10
     steps:
       - name: Checkout repository
@@ -161,8 +162,9 @@ jobs:
     name: Poutine
     runs-on: ubuntu-24.04
     permissions:
-      security-events: write
-      contents: read
+      security-events: write # Required so github/codeql-action/upload-sarif can publish Poutine results to the repository's code scanning alerts.
+      contents: read         # Required for actions/checkout to clone the (private) caller repository so Poutine can scan its build pipelines.
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -190,9 +192,10 @@ jobs:
     name: zizmor
     runs-on: ubuntu-24.04
     permissions:
-      security-events: write
-      actions: read
-      contents: read
+      security-events: write # Required so the zizmor action can publish SARIF results to the repository's code scanning alerts.
+      actions: read          # Required by the zizmor action to inspect workflow run metadata while scanning.
+      contents: read         # Required for actions/checkout to clone the (private) caller repository so zizmor can scan its workflow files.
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3

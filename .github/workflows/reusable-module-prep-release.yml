@@ -59,9 +59,9 @@ jobs:
     name: Prepare Release
     runs-on: ubuntu-latest
     permissions:
-      # Give the default token permission to commit, push the changed files, and open a pull request.
-      contents: write
-      pull-requests: write
+      contents: write      # Required to clone the target repository and push the auto-generated `release/<new-version>` branch using the persisted GITHUB_TOKEN.
+      pull-requests: write # Required so `gh pr create` can open the draft release pull request against the module's target branch.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3

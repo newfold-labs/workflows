@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 # Disable permissions for all available scopes by default.
-# Any needed permissions should be configured individually for each job.
+# Any needed permissions should be configured at the job level.
 permissions: {}
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
   verify-module-plugin-test:
     name: ${{ matrix.name }} (${{ format( '{0}{1}{2}', matrix.module, ( matrix.secondary-module-repo && format( '{0}{1}', ' with ', matrix.secondary-module-repo ) || '' ), ( ! matrix.only-module-tests && ' - all tests' || '' ) ) }})
     permissions:
-      contents: read
+      contents: read # Required so the called module-plugin-test-playwright workflow can use actions/checkout to clone the target plugin repository.
     strategy:
       fail-fast: false
       matrix:
@@ -120,7 +120,7 @@ jobs:
           # Excluding on brand alone removes every web.com combination from the matrix.
           - brand: 'web.com'
 
-    uses: ./.github/workflows/module-plugin-test-playwright.yml
+    uses: newfold-labs/workflows/.github/workflows/module-plugin-test-playwright.yml@${{ github.sha }}
     with:
       plugin-repo: ${{ matrix.plugin-repo }}
       module-repo: newfold-labs/wp-module-${{ matrix.module }}

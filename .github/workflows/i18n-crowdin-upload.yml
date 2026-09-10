@@ -14,13 +14,16 @@ on:
       CROWDIN_PERSONAL_TOKEN:
         required: true
 
-permissions:
-  contents: write
-  pull-requests: write
+# Disable permissions for all available scopes by default.
+# Any needed permissions should be configured at the job level.
+permissions: {}
 
 jobs:
   synchronize-with-crowdin:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required for actions/checkout to clone the (private) caller repository. The Crowdin action only uploads sources/translations to Crowdin via CROWDIN_PERSONAL_TOKEN, so the workflow's GITHUB_TOKEN does not need write scopes.
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
