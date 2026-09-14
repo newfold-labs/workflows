@@ -390,7 +390,7 @@ jobs:
           REPO="${PLUGIN_REPO}"
           ISSUE_COMMENTS="repos/${REPO}/issues/${PR_NUMBER}/comments"
           EXISTING_ID=$(gh api "$ISSUE_COMMENTS" --paginate \
-            --jq ".[] | select(.body | contains(\$marker)) | .id" --arg marker "$MARKER" | head -1)
+            | jq -r --arg marker "$MARKER" '.[] | select(.body | contains($marker)) | .id' | head -1)
 
           if [ -n "$EXISTING_ID" ]; then
             gh api --method PATCH "repos/${REPO}/issues/comments/${EXISTING_ID}" \
