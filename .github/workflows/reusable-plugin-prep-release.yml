@@ -331,8 +331,12 @@ jobs:
           RELEASE_BRANCH="release/${NEW_VERSION}"
           git checkout -b "$RELEASE_BRANCH"
           git add .
-          git commit -m "🤖 prep for release - ${OLD_VERSION} → ${NEW_VERSION}"
-          git push origin "$RELEASE_BRANCH"
+          git diff --cached --quiet || git commit -m "🤖 prep for release - ${OLD_VERSION} → ${NEW_VERSION}"
+          if git ls-remote --exit-code origin "refs/heads/$RELEASE_BRANCH" > /dev/null 2>&1; then
+            git push origin "$RELEASE_BRANCH" --force-with-lease
+          else
+            git push origin "$RELEASE_BRANCH"
+          fi
 
       - name: Create Pull Request to target branch
         id: create_pr
@@ -361,15 +365,23 @@ jobs:
             echo "_Generated automatically by CI workflow (see prep-release workflow)._"
           })"
 
-          PR_URL=$(gh pr create \
-            --title "Automated ${RELEASE_LEVEL} release: ${NEW_VERSION}" \
-            --body "$PR_BODY" \
-            --base "${PLUGIN_TARGET_BRANCH}" \
-            --head "$RELEASE_BRANCH" \
-            --draft )
+          EXISTING_PR=$(gh pr list --head "$RELEASE_BRANCH" --base "${PLUGIN_TARGET_BRANCH}" \
+            --json number,url --jq '.[0]' 2>/dev/null || true)
+
+          if [ -n "$EXISTING_PR" ]; then
+            PR_URL=$(echo "$EXISTING_PR" | jq -r '.url')
+            PR_NUMBER=$(echo "$EXISTING_PR" | jq -r '.number')
+          else
+            PR_URL=$(gh pr create \
+              --title "Automated ${RELEASE_LEVEL} release: ${NEW_VERSION}" \
+              --body "$PR_BODY" \
+              --base "${PLUGIN_TARGET_BRANCH}" \
+              --head "$RELEASE_BRANCH" \
+              --draft)
+            PR_NUMBER=$(gh pr view "$RELEASE_BRANCH" --json number -q .number)
+          fi
 
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
-          PR_NUMBER=$(gh pr view "$RELEASE_BRANCH" --json number -q .number)
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
       - name: Comment wp-module dependency updates on release PR
