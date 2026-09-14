@@ -396,7 +396,7 @@ jobs:
           set -e
 
           MARKER="<!-- module-dependency-updates -->"
-          COMMENT_BODY=$(printf "%s\n\n%s\n\n_Compared locked \`newfold-labs/wp-module-*\` packages to tag \`%s\`._" \
+          COMMENT_BODY=$(printf "%s\n\n%s\n\n_Compared locked \`newfold-labs/wp-module-*\` packages to tag \`%s\`._\n\n> [!NOTE]\n> _This comment reflects module dependencies at the time the release PR was created and is not updated automatically with subsequent commits. If module dependencies change after this point, please update this comment manually._" \
             "$MARKER" "$SUMMARY" "$BASELINE_TAG")
 
           REPO="${PLUGIN_REPO}"
