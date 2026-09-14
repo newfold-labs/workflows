@@ -193,7 +193,7 @@ jobs:
           ZIP_PATH: ${{ steps.zip.outputs.zip_path }}
         run: |
           set -euo pipefail
-          ROOT=$(unzip -Z1 "$ZIP_PATH" | head -1 | cut -d/ -f1)
+          ROOT=$(unzip -Z1 "$ZIP_PATH" | awk -F/ 'NR==1{root=$1} END{print root}')
           echo "Zip root folder: ${ROOT}"
           if [[ "$ROOT" != "$PACKAGE" ]]; then
             echo "::error::Expected zip root folder '${PACKAGE}', got '${ROOT}'."
