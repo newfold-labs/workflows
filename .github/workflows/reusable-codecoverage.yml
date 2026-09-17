@@ -148,7 +148,7 @@ jobs:
           path: gh-pages
 
       - name: Install PHP
-        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ matrix.php }}
           coverage: xdebug
@@ -179,7 +179,7 @@ jobs:
       # PHP is restored right after, so tests still run on the version under test.
       - name: Switch PHP for composer install
         if: ${{ inputs.install-php-version != '' && inputs.install-php-version != matrix.php }}
-        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ inputs.install-php-version }}
           coverage: none
@@ -191,7 +191,7 @@ jobs:
 
       - name: Restore matrix PHP version
         if: ${{ inputs.install-php-version != '' && inputs.install-php-version != matrix.php }}
-        uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2.37.0
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ matrix.php }}
           coverage: xdebug
@@ -485,7 +485,7 @@ jobs:
           echo "$OUTPUT" >> coverage-comment.md
 
       - name: Add coverage PR comment
-        uses: mshick/add-pr-comment@f102bb3ebc97eedd4e2a98a9e71e462cc257fe80 # v3.9.1
+        uses: mshick/add-pr-comment@ec328af66588ab8f77cdeb2c264f14aba45bbf59 # v3.12.0
         if: ${{ matrix.php == inputs.coverage-php-version && github.event_name == 'pull_request' }}
         continue-on-error: true  # When a PR is opened by a non-member, there are no write permissions (and no access to secrets), so this step will always fail.
         with:
