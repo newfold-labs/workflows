@@ -67,15 +67,35 @@ jobs:
       MODULE_SOURCE_BRANCH: ${{ inputs.module-branch }}
       MODULE_TARGET_BRANCH: ${{ inputs.module-target-branch != '' && inputs.module-target-branch || inputs.module-branch }}
     steps:
-      # Major bumps change the semver major (for example 3.x → 4.0.0). That is appropriate on main only;
-      # LTS lines (v1, v3, etc.) should use patch or minor within the same major line.
-      - name: Validate release level for branch
+      # Fail fast on invalid release level, unsafe branch names, or major bumps against non-main lines.
+      - name: Validate workflow inputs
         env:
           RELEASE_LEVEL: ${{ inputs.level }}
           MODULE_BRANCH: ${{ inputs.module-branch }}
+          MODULE_TARGET_BRANCH: ${{ env.MODULE_TARGET_BRANCH }}
         run: |
-          if [ "${RELEASE_LEVEL}" = "major" ] && [ "${MODULE_BRANCH}" != "main" ]; then
-            echo "::error::Major releases are only allowed when module-branch is main (got '${MODULE_BRANCH}'). Use patch or minor on LTS or maintenance branches."
+          case "${RELEASE_LEVEL}" in
+            patch|minor|major) ;;
+            *)
+              echo "::error::Invalid release level '${RELEASE_LEVEL}'. Expected patch, minor, or major."
+              exit 1
+              ;;
+          esac
+
+          validate_git_ref() {
+            local name="$1"
+            local value="$2"
+            if ! [[ "${value}" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
+              echo "::error::Invalid ${name} '${value}'. Use branch or tag names with letters, numbers, /, -, _, and . only."
+              exit 1
+            fi
+          }
+
+          validate_git_ref "module-branch" "${MODULE_BRANCH}"
+          validate_git_ref "module-target-branch" "${MODULE_TARGET_BRANCH}"
+
+          if [ "${RELEASE_LEVEL}" = "major" ] && { [ "${MODULE_BRANCH}" != "main" ] || [ "${MODULE_TARGET_BRANCH}" != "main" ]; }; then
+            echo "::error::Major releases are only allowed when both module-branch and module-target-branch are main (got source '${MODULE_BRANCH}', target '${MODULE_TARGET_BRANCH}'). Use patch or minor on LTS or maintenance branches."
             exit 1
           fi
 
@@ -84,7 +104,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           repository: ${{ inputs.module-repo }}
-          ref: ${{ env.MODULE_SOURCE_BRANCH }}
+          ref: ${{ inputs.module-branch }}
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: true
@@ -122,9 +142,17 @@ jobs:
         with:
           composer-options: "--optimize-autoloader --verbose"
 
-      # Install JS dependencies for build and npm version bump.
+      # Install JS dependencies for build and npm version bump when package.json is present.
       - name: Install JS Dependencies
-        run: npm ci --legacy-peer-deps
+        if: ${{ inputs.json-file != '' }}
+        env:
+          JSON_FILE: ${{ inputs.json-file }}
+        run: |
+          if [ -f "${JSON_FILE}" ]; then
+            npm ci --legacy-peer-deps
+          else
+            echo "::notice::${JSON_FILE} not found; skipping JS dependency install."
+          fi
 
       # Read current package version and validate semver shape before bumping.
       - name: Get old version
@@ -334,7 +362,7 @@ jobs:
           echo "Source branch: ${MODULE_SOURCE_BRANCH}"
 
           # Fetch merged PRs to the branch since the last tag
-          MERGED_PRS=$(gh pr list --repo "${MODULE_REPO}" --state merged --search "base:${MODULE_SOURCE_BRANCH}" --json title,number,mergedAt --jq \
+          MERGED_PRS=$(gh pr list --repo "${MODULE_REPO}" --state merged --limit 100 --search "base:${MODULE_SOURCE_BRANCH}" --json title,number,mergedAt --jq \
             "[.[] | select(.mergedAt > \"$TAG_DATE\") | \"- #\(.number) \(.title)\"] | join(\"\\n\")")
 
           if [ -z "$MERGED_PRS" ]; then
