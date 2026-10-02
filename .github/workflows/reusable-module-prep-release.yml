@@ -1,6 +1,10 @@
 ##
 # This reusable workflow is used in modules to prep a release.
 #
+# Most modules release from `main`. Set module-branch to the line you are releasing
+# (for example `v3` on an LTS branch). Optional module-target-branch overrides only
+# the pull request base when it must differ from module-branch (uncommon for modules).
+#
 # Example usage: https://github.com/newfold-labs/wp-module-marketplace/blob/main/.github/workflows/newfold-prep-release.yml
 ##
 name: Reusable Module Prepare Release
@@ -13,9 +17,14 @@ on:
         type: string
         required: true
       module-branch:
-        description: The branch (or commit) of the module to use. This is used as a starting point for the version changes and the target branch for the pull request.
+        description: Branch (or commit) to check out and bump versions from. Also used as the PR base unless module-target-branch is set. Use an LTS branch name (for example `v3`) when not releasing from main.
         type: string
         default: 'main'
+        required: false
+      module-target-branch:
+        description: Optional PR base branch when it differs from module-branch. Leave empty to open the release PR against module-branch.
+        type: string
+        default: ''
         required: false
       level:
         description: The level of release to be used (patch, minor, major).
@@ -46,23 +55,51 @@ on:
 permissions: {}
 
 jobs:
-  # This job is used to prepare a release.
-  #
-  # It does the following:
-  # - Bumps the version as specified in the input
-  # - Syncs composer.json "version" when present (matches package.json bump)
-  # - Prepares build artifacts
-  # - Creates a release branch
-  # - Commits the changes
-  # - Creates a pull request to the main branch
+  # Bumps versions, runs build/i18n, opens a draft PR from release/{version} into the target branch.
   prep-release:
     name: Prepare Release
     runs-on: ubuntu-latest
     permissions:
-      # Give the default token permission to commit, push the changed files, and open a pull request.
+      # Commit, push the release branch, and open the draft pull request.
       contents: write
       pull-requests: write
+    env:
+      MODULE_SOURCE_BRANCH: ${{ inputs.module-branch }}
+      MODULE_TARGET_BRANCH: ${{ inputs.module-target-branch != '' && inputs.module-target-branch || inputs.module-branch }}
     steps:
+      # Fail fast on invalid release level, unsafe branch names, or major bumps against non-main lines.
+      - name: Validate workflow inputs
+        env:
+          RELEASE_LEVEL: ${{ inputs.level }}
+          MODULE_BRANCH: ${{ inputs.module-branch }}
+          MODULE_TARGET_BRANCH: ${{ env.MODULE_TARGET_BRANCH }}
+        run: |
+          case "${RELEASE_LEVEL}" in
+            patch|minor|major) ;;
+            *)
+              echo "::error::Invalid release level '${RELEASE_LEVEL}'. Expected patch, minor, or major."
+              exit 1
+              ;;
+          esac
+
+          validate_git_ref() {
+            local name="$1"
+            local value="$2"
+            if ! [[ "${value}" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
+              echo "::error::Invalid ${name} '${value}'. Use branch or tag names with letters, numbers, /, -, _, and . only."
+              exit 1
+            fi
+          }
+
+          validate_git_ref "module-branch" "${MODULE_BRANCH}"
+          validate_git_ref "module-target-branch" "${MODULE_TARGET_BRANCH}"
+
+          if [ "${RELEASE_LEVEL}" = "major" ] && { [ "${MODULE_BRANCH}" != "main" ] || [ "${MODULE_TARGET_BRANCH}" != "main" ]; }; then
+            echo "::error::Major releases are only allowed when both module-branch and module-target-branch are main (got source '${MODULE_BRANCH}', target '${MODULE_TARGET_BRANCH}'). Use patch or minor on LTS or maintenance branches."
+            exit 1
+          fi
+
+      # Clone the module at the source branch with full history and tags (for release notes).
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
@@ -72,6 +109,7 @@ jobs:
           fetch-tags: true
           persist-credentials: true
 
+      # PHP and Composer for validate, install, and i18n scripts.
       - name: Setup PHP
         uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f  # v2.37.0
         with:
@@ -79,12 +117,14 @@ jobs:
           coverage: none
           tools: composer, cs2pr
 
+      # Node for version bump, npm scripts, and composer version sync helpers.
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
         with:
           node-version: '${{ inputs.node-version }}'
           cache: 'npm'
 
+      # Log toolchain versions in the job log for debugging reproducibility issues.
       - name: Show environment tooling versions
         run: |
           php --version
@@ -92,17 +132,29 @@ jobs:
           node --version
           npm --version
 
+      # Fail early if composer.json / composer.lock are out of sync or invalid.
       - name: Validate composer.json and composer.lock
         run: composer validate
 
+      # Install PHP dependencies before composer scripts (i18n) and lock refresh.
       - name: Install PHP Dependencies
         uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
         with:
           composer-options: "--optimize-autoloader --verbose"
 
+      # Install JS dependencies for build and npm version bump when package.json is present.
       - name: Install JS Dependencies
-        run: npm ci --legacy-peer-deps
+        if: ${{ inputs.json-file != '' }}
+        env:
+          JSON_FILE: ${{ inputs.json-file }}
+        run: |
+          if [ -f "${JSON_FILE}" ]; then
+            npm ci --legacy-peer-deps
+          else
+            echo "::notice::${JSON_FILE} not found; skipping JS dependency install."
+          fi
 
+      # Read current package version and validate semver shape before bumping.
       - name: Get old version
         if: ${{ inputs.json-file != '' }}
         id: old
@@ -119,6 +171,7 @@ jobs:
 
           echo "version=$RAW_VERSION" >> "$GITHUB_OUTPUT"
 
+      # Apply patch/minor/major bump in package.json (no git tag yet).
       - name: Update version in package.json
         if: ${{ inputs.json-file != '' }}
         id: new
@@ -136,6 +189,7 @@ jobs:
 
           echo "version=${RAW_VERSION#v}" >> "$GITHUB_OUTPUT"
 
+      # Detect whether composer.json has a top-level version field worth syncing.
       - name: Check composer.json for version field
         id: composer_version_check
         if: ${{ inputs.json-file != '' && inputs.composer-file != '' }}
@@ -166,6 +220,7 @@ jobs:
             echo "::notice::composer file found at ${COMPOSER_FILE}, but no \"version\" field (or it is empty). Skipping composer version update."
           fi
 
+      # Match composer.json version to package.json and refresh composer.lock when present.
       - name: Update version in composer.json
         id: composer_version_update
         if: ${{ inputs.json-file != '' && inputs.composer-file != '' && steps.composer_version_check.outputs.has_version == 'true' }}
@@ -186,6 +241,7 @@ jobs:
 
           echo "message=✅ Synced \`${{ inputs.composer-file }}\` version to ${NEW_VERSION} and refreshed \`composer.lock\` (or skipped if no lock file)" >> "$GITHUB_OUTPUT"
 
+      # Replace version constant in bootstrap (or other) PHP file when configured.
       - name: Update version in PHP file
         if: ${{ inputs.php-file != '' }}
         env:
@@ -195,6 +251,7 @@ jobs:
         run: |
           sed -i "s/${OLD_VERSION}/${NEW_VERSION}/g" "${PHP_FILE}"
 
+      # Echo old/new versions to the step log.
       - name: Output summary
         env:
           OLD_VERSION: ${{ steps.old.outputs.version }}
@@ -203,8 +260,7 @@ jobs:
           echo "Old version: ${OLD_VERSION}"
           echo "New version: ${NEW_VERSION}"
 
-      # Module can define a custom post-set-version command for things like removing outdated build files.
-      # Once builds across modules are standardized, this can be removed.
+      # Optional npm hook for module-specific cleanup after version bump.
       - name: Run post-set-version command
         id: run-post-set-version
         if: ${{ inputs.json-file != '' }}
@@ -217,6 +273,7 @@ jobs:
             echo "message=ℹ️ Notice: post-set-version script not defined." >> "$GITHUB_OUTPUT"
           fi
 
+      # Produce build artifacts committed on the release branch when the script exists.
       - name: Run build command
         id: run-build
         if: ${{ inputs.json-file != '' }}
@@ -229,6 +286,7 @@ jobs:
             echo "message=ℹ️ Notice: build script not defined." >> "$GITHUB_OUTPUT"
           fi
 
+      # Regenerate translation files when the composer i18n script is defined.
       - name: Run composer i18n command
         id: run-i18n
         run: |
@@ -256,7 +314,7 @@ jobs:
             done
           fi
 
-      # Validate that every generated .l10n.php file is syntactically valid PHP.
+      # Ensure generated .l10n.php files parse before they land on the release branch.
       - name: Validate .l10n.php syntax
         id: validate_l10n
         run: |
@@ -276,12 +334,13 @@ jobs:
             echo "All .l10n.php files passed syntax check."
           fi
 
+      # Build release-notes section from PRs merged into the source branch since the latest tag.
       - name: Get merged PRs since last tag/release
         id: merged-prs
         env:
           GH_TOKEN: ${{ github.token }}
           MODULE_REPO: ${{ inputs.module-repo }}
-          MODULE_BRANCH: ${{ inputs.module-branch }}
+          MODULE_SOURCE_BRANCH: ${{ env.MODULE_SOURCE_BRANCH }}
         run: |
           set -e
 
@@ -300,14 +359,15 @@ jobs:
           echo "Repo: ${MODULE_REPO}"
           echo "Latest tag: $LATEST_TAG"
           echo "Tag date: $TAG_DATE"
+          echo "Source branch: ${MODULE_SOURCE_BRANCH}"
 
           # Fetch merged PRs to the branch since the last tag
-          MERGED_PRS=$(gh pr list --repo "${MODULE_REPO}" --state merged --search "base:${MODULE_BRANCH}" --json title,number,mergedAt --jq \
+          MERGED_PRS=$(gh pr list --repo "${MODULE_REPO}" --state merged --limit 100 --search "base:${MODULE_SOURCE_BRANCH}" --json title,number,mergedAt --jq \
             "[.[] | select(.mergedAt > \"$TAG_DATE\") | \"- #\(.number) \(.title)\"] | join(\"\\n\")")
 
           if [ -z "$MERGED_PRS" ]; then
             echo "No pull requests merged since last release. Skipping PR listing."
-            echo "prs=No pull requests merged since last release to the ${MODULE_BRANCH} branch." >> "$GITHUB_OUTPUT"
+            echo "prs=No pull requests merged since last release to the ${MODULE_SOURCE_BRANCH} branch." >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -317,7 +377,7 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # create the release branch, commit the changes with the github-actions[bot]
+      # Push release/{version} with version, build, and i18n changes.
       - name: Create and commit to release branch
         id: push-changes
         env:
@@ -334,6 +394,7 @@ jobs:
           git commit -m "🤖 prep for release - ${OLD_VERSION} → ${NEW_VERSION}"
           git push origin "$RELEASE_BRANCH"
 
+      # Open a draft PR from the release branch into the target (main or LTS) branch.
       - name: Create Pull Request to target branch
         id: create_pr
         env:
@@ -346,7 +407,7 @@ jobs:
           COMPOSER_VERSION_MESSAGE: ${{ steps.composer_version_update.outputs.message }}
           MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
           RELEASE_LEVEL: ${{ inputs.level }}
-          MODULE_TARGET_BRANCH: ${{ inputs.module-branch }}
+          MODULE_TARGET_BRANCH: ${{ env.MODULE_TARGET_BRANCH }}
         run: |
           RELEASE_BRANCH="release/${NEW_VERSION}"
           PR_BODY="$({
@@ -372,6 +433,7 @@ jobs:
 
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
 
+      # Surface version, branch, and PR link on the Actions run summary tab.
       - name: Write release summary to workflow summary
         env:
           OLD_VERSION: ${{ steps.old.outputs.version }}
@@ -382,11 +444,15 @@ jobs:
           COMPOSER_VERSION_MESSAGE: ${{ steps.composer_version_update.outputs.message }}
           MERGED_PRS: ${{ steps.merged-prs.outputs.prs }}
           PR_URL: ${{ steps.create_pr.outputs.pr_url }}
+          MODULE_SOURCE_BRANCH: ${{ env.MODULE_SOURCE_BRANCH }}
+          MODULE_TARGET_BRANCH: ${{ env.MODULE_TARGET_BRANCH }}
         run: |
           {
             echo "## 🚀 Release Prep Summary"
             echo ""
             echo "- **Version bump**: ${OLD_VERSION} → ${NEW_VERSION}"
+            echo "- **Source branch**: \`${MODULE_SOURCE_BRANCH}\`"
+            echo "- **Target branch**: \`${MODULE_TARGET_BRANCH}\`"
             echo "- **Release branch created**: \`release/${NEW_VERSION}\`"
             echo "- **Pull request created**: ${PR_URL}"
             echo ""
